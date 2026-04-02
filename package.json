@@ -11,6 +11,9 @@
     "lint": "tsc --noEmit",
     "start": "tsx server.ts"
   },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
     "@google/genai": "^1.29.0",
     "@huggingface/inference": "^4.13.15",
