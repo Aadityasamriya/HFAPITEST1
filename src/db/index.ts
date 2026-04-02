@@ -1,139 +1,92 @@
-import sqlite3 from 'sqlite3';
-import { open, Database } from 'sqlite';
-import path from 'path';
-import fs from 'fs';
-import { createClient } from '@supabase/supabase-js';
+import { MongoClient, Db, ObjectId } from 'mongodb';
 
-const DB_DIR = path.join(process.cwd(), 'data');
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
-}
+let dbInstance: Db | null = null;
+let clientInstance: MongoClient | null = null;
 
-const DB_PATH = path.join(DB_DIR, 'database.sqlite');
-
-let dbInstance: Database | null = null;
-
-export async function getDb(): Promise<Database> {
+export async function getDb(): Promise<Db> {
   if (dbInstance) return dbInstance;
 
-  dbInstance = await open({
-    filename: DB_PATH,
-    driver: sqlite3.Database
-  });
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error('MONGODB_URI environment variable is required to connect to MongoDB');
+  }
 
-  await dbInstance.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY,
-      telegram_id TEXT UNIQUE NOT NULL,
-      hf_api_key TEXT,
-      supabase_url TEXT,
-      supabase_key TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-  `);
+  clientInstance = new MongoClient(uri);
+  await clientInstance.connect();
+  
+  dbInstance = clientInstance.db(); // Uses the default DB in the URI
+  
+  // Ensure indexes for performance
+  await dbInstance.collection('users').createIndex({ telegram_id: 1 }, { unique: true });
+  await dbInstance.collection('messages').createIndex({ user_id: 1, created_at: -1 });
 
   return dbInstance;
 }
 
 export async function getUser(telegramId: string) {
   const db = await getDb();
-  let user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+  let user = await db.collection('users').findOne({ telegram_id: telegramId });
+  
   if (!user) {
-    const result = await db.run('INSERT INTO users (telegram_id) VALUES (?)', [telegramId]);
-    user = await db.get('SELECT * FROM users WHERE id = ?', [result.lastID]);
+    const newUser = {
+      telegram_id: telegramId,
+      hf_api_key: null,
+      created_at: new Date()
+    };
+    const result = await db.collection('users').insertOne(newUser);
+    user = { _id: result.insertedId, ...newUser };
   }
-  return user;
+  
+  // Map _id to id so the rest of the app works without changes
+  return { ...user, id: user._id.toString() };
 }
 
 export async function updateUserApiKey(telegramId: string, apiKey: string) {
   const db = await getDb();
-  await db.run('UPDATE users SET hf_api_key = ? WHERE telegram_id = ?', [apiKey, telegramId]);
+  await db.collection('users').updateOne(
+    { telegram_id: telegramId },
+    { $set: { hf_api_key: apiKey } }
+  );
 }
 
-export async function updateUserSupabase(telegramId: string, url: string, key: string) {
+export async function addMessage(userId: string | number, role: string, content: string) {
   const db = await getDb();
-  await db.run('UPDATE users SET supabase_url = ?, supabase_key = ? WHERE telegram_id = ?', [url, key, telegramId]);
+  await db.collection('messages').insertOne({
+    user_id: userId.toString(),
+    role,
+    content,
+    created_at: new Date()
+  });
 }
 
-export async function addMessage(user: any, role: string, content: string) {
-  // If user has Supabase configured, store it there to keep developer DB clean
-  if (user.supabase_url && user.supabase_key) {
-    try {
-      const supabase = createClient(user.supabase_url, user.supabase_key);
-      await supabase.from('messages').insert([{ role, content, telegram_id: user.telegram_id }]);
-      return;
-    } catch (error) {
-      console.error('Failed to save to user Supabase, falling back to local DB', error);
-    }
-  }
-
-  // Fallback to local SQLite
+export async function getChatHistory(userId: string | number, limit = 10) {
   const db = await getDb();
-  await db.run('INSERT INTO messages (user_id, role, content) VALUES (?, ?, ?)', [user.id, role, content]);
+  const messages = await db.collection('messages')
+    .find({ user_id: userId.toString() })
+    .sort({ created_at: -1 })
+    .limit(limit)
+    .toArray();
+    
+  return messages.map(m => ({ role: m.role, content: m.content }));
 }
 
-export async function getChatHistory(user: any, limit = 10) {
-  // If user has Supabase configured, fetch from there
-  if (user.supabase_url && user.supabase_key) {
-    try {
-      const supabase = createClient(user.supabase_url, user.supabase_key);
-      const { data, error } = await supabase
-        .from('messages')
-        .select('role, content')
-        .eq('telegram_id', user.telegram_id)
-        .order('created_at', { ascending: false })
-        .limit(limit);
-      
-      if (!error && data) {
-        return data;
-      }
-    } catch (error) {
-      console.error('Failed to fetch from user Supabase, falling back to local DB', error);
-    }
-  }
-
-  // Fallback to local SQLite
+export async function clearChatHistory(userId: string | number) {
   const db = await getDb();
-  return await db.all('SELECT role, content FROM messages WHERE user_id = ? ORDER BY created_at DESC LIMIT ?', [user.id, limit]);
+  await db.collection('messages').deleteMany({ user_id: userId.toString() });
 }
 
-export async function clearChatHistory(user: any) {
-  if (user.supabase_url && user.supabase_key) {
-    try {
-      const supabase = createClient(user.supabase_url, user.supabase_key);
-      await supabase.from('messages').delete().eq('telegram_id', user.telegram_id);
-    } catch (error) {
-      console.error('Failed to clear user Supabase', error);
-    }
-  }
+export async function resetDatabase(userId: string | number) {
   const db = await getDb();
-  await db.run('DELETE FROM messages WHERE user_id = ?', [user.id]);
-}
-
-export async function resetDatabase(user: any) {
-  await clearChatHistory(user);
-  const db = await getDb();
-  await db.run('DELETE FROM users WHERE id = ?', [user.id]);
+  await db.collection('messages').deleteMany({ user_id: userId.toString() });
+  await db.collection('users').deleteOne({ _id: new ObjectId(userId.toString()) });
 }
 
 export async function getStats() {
   const db = await getDb();
-  const usersCount = await db.get('SELECT COUNT(*) as count FROM users');
-  const messagesCount = await db.get('SELECT COUNT(*) as count FROM messages');
-  const supabaseUsers = await db.get('SELECT COUNT(*) as count FROM users WHERE supabase_url IS NOT NULL');
-  
+  const usersCount = await db.collection('users').countDocuments();
+  const messagesCount = await db.collection('messages').countDocuments();
   return {
-    users: usersCount?.count || 0,
-    messages: messagesCount?.count || 0,
-    supabaseUsers: supabaseUsers?.count || 0
+    users: usersCount,
+    messages: messagesCount
   };
 }

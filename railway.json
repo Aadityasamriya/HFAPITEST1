@@ -19,6 +19,10 @@
     "TELEGRAM_BOT_TOKEN": {
       "description": "Your Telegram Bot Token from @BotFather. Required to run the bot.",
       "required": true
+    },
+    "MONGODB_URI": {
+      "description": "Your MongoDB connection string (e.g., mongodb+srv://...). Required for database storage.",
+      "required": true
     }
   }
 }
