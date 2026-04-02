@@ -19,10 +19,6 @@
     "TELEGRAM_BOT_TOKEN": {
       "description": "Your Telegram Bot Token from @BotFather. Required to run the bot.",
       "required": true
-    },
-    "GEMINI_API_KEY": {
-      "description": "Your Gemini API Key (Optional, used for the web interface if needed).",
-      "required": false
     }
   }
 }
