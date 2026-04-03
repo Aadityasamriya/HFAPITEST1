@@ -2,8 +2,10 @@ import { HfInference } from '@huggingface/inference';
 
 export class ModelManager {
   private hf: HfInference;
+  private apiKey: string;
 
   constructor(apiKey: string) {
+    this.apiKey = apiKey;
     this.hf = new HfInference(apiKey);
   }
 
@@ -12,12 +14,18 @@ export class ModelManager {
    */
   async validateApiKey(): Promise<boolean> {
     try {
-      // Make a lightweight request to a fast model to check auth
-      await this.hf.textGeneration({
-        model: 'google/flan-t5-small',
-        inputs: 'test',
-        parameters: { max_new_tokens: 1 }
+      // Use the official whoami endpoint to reliably check if the token is valid
+      const response = await fetch('https://huggingface.co/api/whoami-v2', {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`
+        }
       });
+      
+      if (!response.ok) {
+        console.error('API Key Validation Failed:', response.status, response.statusText);
+        return false;
+      }
+      
       return true;
     } catch (error: any) {
       console.error('API Key Validation Error:', error.message);
