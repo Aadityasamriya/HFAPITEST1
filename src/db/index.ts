@@ -90,3 +90,8 @@ export async function getStats() {
     messages: messagesCount
   };
 }
+
+export async function getAllUsers() {
+  const db = await getDb();
+  return await db.collection('users').find({}).toArray();
+}

@@ -23,6 +23,10 @@
     "MONGODB_URI": {
       "description": "Your MongoDB connection string (e.g., mongodb+srv://...). Required for database storage.",
       "required": true
+    },
+    "ADMIN_TELEGRAM_ID": {
+      "description": "Optional: Your Telegram User ID. If set, unlocks admin commands like /stats.",
+      "required": false
     }
   }
 }

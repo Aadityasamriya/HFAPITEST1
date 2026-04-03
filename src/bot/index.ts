@@ -1,12 +1,15 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getUser, updateUserApiKey, addMessage, getChatHistory, clearChatHistory, resetDatabase } from '../db/index';
+import { getUser, updateUserApiKey, addMessage, getChatHistory, clearChatHistory, resetDatabase, getStats, getAllUsers } from '../db/index';
 import { ModelManager } from '../ai/index';
 
 // State to track if user is currently entering an API key
 const waitingForApiKey = new Set<number>();
+// State to track if admin is broadcasting
+const waitingForBroadcast = new Set<number>();
 
 export async function startBot(token: string) {
   const bot = new TelegramBot(token, { polling: true });
+  const adminId = process.env.ADMIN_TELEGRAM_ID;
 
   bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
@@ -54,6 +57,23 @@ Your API key is stored securely in your personal database and your credits will 
     await bot.sendMessage(chatId, '💥 Database reset successfully. All your data has been deleted.');
   });
 
+  // Admin Commands
+  bot.onText(/\/stats/, async (msg) => {
+    const chatId = msg.chat.id;
+    if (adminId && chatId.toString() === adminId) {
+      const stats = await getStats();
+      await bot.sendMessage(chatId, `📊 Bot Statistics:\n\nUsers: ${stats.users}\nMessages Processed: ${stats.messages}`);
+    }
+  });
+
+  bot.onText(/\/broadcast/, async (msg) => {
+    const chatId = msg.chat.id;
+    if (adminId && chatId.toString() === adminId) {
+      waitingForBroadcast.add(chatId);
+      await bot.sendMessage(chatId, '📢 Please send the message you want to broadcast to all users:');
+    }
+  });
+
   bot.on('callback_query', async (callbackQuery) => {
     const msg = callbackQuery.message;
     if (!msg) return;
@@ -78,10 +98,40 @@ Your API key is stored securely in your personal database and your credits will 
     // Ignore commands
     if (text && text.startsWith('/')) return;
 
+    // Admin Broadcast Logic
+    if (waitingForBroadcast.has(chatId) && text && adminId && chatId.toString() === adminId) {
+      waitingForBroadcast.delete(chatId);
+      await bot.sendMessage(chatId, '📢 Broadcasting message...');
+      
+      const users = await getAllUsers();
+      let successCount = 0;
+      for (const user of users) {
+        try {
+          await bot.sendMessage(user.telegram_id, `📢 Admin Broadcast:\n\n${text}`);
+          successCount++;
+        } catch (e) {
+          console.error(`Failed to send broadcast to ${user.telegram_id}`);
+        }
+      }
+      await bot.sendMessage(chatId, `✅ Broadcast sent successfully to ${successCount}/${users.length} users.`);
+      return;
+    }
+
+    // API Key Input Logic
     if (waitingForApiKey.has(chatId) && text) {
-      await updateUserApiKey(chatId.toString(), text.trim());
-      waitingForApiKey.delete(chatId);
-      await bot.sendMessage(chatId, '✅ Hugging Face API Key saved successfully! You can now start chatting.');
+      const apiKey = text.trim();
+      const ai = new ModelManager(apiKey);
+      
+      await bot.sendMessage(chatId, '⏳ Validating your API key...');
+      const isValid = await ai.validateApiKey();
+      
+      if (isValid) {
+        await updateUserApiKey(chatId.toString(), apiKey);
+        waitingForApiKey.delete(chatId);
+        await bot.sendMessage(chatId, '✅ Hugging Face API Key saved successfully! You can now start chatting.');
+      } else {
+        await bot.sendMessage(chatId, '❌ Invalid API Key. Please check your key and try again. Send the key again, or use /settings later.');
+      }
       return;
     }
 
@@ -107,14 +157,19 @@ Your API key is stored securely in your personal database and your credits will 
           await bot.sendPhoto(chatId, buffer);
           await addMessage(user.id, 'assistant', '[Image Generated]');
         } else {
+          const isCode = intent === 'code_generation';
           const history = await getChatHistory(user.id, 5);
-          const response = await ai.generateText(text, history);
-          await bot.sendMessage(chatId, response);
+          const response = await ai.generateText(text, history, isCode);
+          await bot.sendMessage(chatId, response, { parse_mode: isCode ? 'Markdown' : undefined });
           await addMessage(user.id, 'assistant', response);
         }
       } catch (error: any) {
         console.error(error);
-        await bot.sendMessage(chatId, '❌ Error processing your request. Please check your API key or try again later.');
+        if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Invalid token'))) {
+           await bot.sendMessage(chatId, '❌ Your Hugging Face API Key is no longer working or invalid. Please set a new one using /settings.');
+        } else {
+           await bot.sendMessage(chatId, '❌ Error processing your request. The model might be loading or unavailable. Please try again later.');
+        }
       }
     } else if (msg.photo) {
       await bot.sendChatAction(chatId, 'typing');
@@ -130,11 +185,15 @@ Your API key is stored securely in your personal database and your credits will 
         const analysis = await ai.analyzeImage(blob, caption);
         
         await bot.sendMessage(chatId, analysis);
-        await addMessage(user.id, 'user', '[Image Sent]');
+        await addMessage(user.id, 'user', `[Image Sent] ${caption}`);
         await addMessage(user.id, 'assistant', analysis);
-      } catch (error) {
+      } catch (error: any) {
         console.error(error);
-        await bot.sendMessage(chatId, '❌ Error analyzing image.');
+        if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+           await bot.sendMessage(chatId, '❌ Your Hugging Face API Key is no longer working. Please set a new one using /settings.');
+        } else {
+           await bot.sendMessage(chatId, '❌ Error analyzing image.');
+        }
       }
     } else if (msg.document) {
       const fileId = msg.document.file_id;
@@ -171,7 +230,7 @@ Your API key is stored securely in your personal database and your credits will 
           extractedText = `ZIP Contents of ${fileName}:\n`;
           zipEntries.forEach((zipEntry) => {
             extractedText += `- ${zipEntry.entryName} (${zipEntry.header.size} bytes)\n`;
-            if (!zipEntry.isDirectory && zipEntry.header.size < 50000 && (zipEntry.entryName.endsWith('.txt') || zipEntry.entryName.endsWith('.md') || zipEntry.entryName.endsWith('.json'))) {
+            if (!zipEntry.isDirectory && zipEntry.header.size < 50000 && (zipEntry.entryName.endsWith('.txt') || zipEntry.entryName.endsWith('.md') || zipEntry.entryName.endsWith('.json') || zipEntry.entryName.endsWith('.py') || zipEntry.entryName.endsWith('.js'))) {
                extractedText += `  Content preview: ${zipEntry.getData().toString('utf8').substring(0, 200)}...\n`;
             }
           });
@@ -183,15 +242,19 @@ Your API key is stored securely in your personal database and your credits will 
         const prompt = `I have extracted the following content from a file named ${fileName}. Please analyze it and provide a summary or answer my question about it.\n\nContent:\n${extractedText.substring(0, 4000)}\n\nUser Question: ${msg.caption || 'What is this file about?'}`;
         
         const history = await getChatHistory(user.id, 5);
-        const aiResponse = await ai.generateText(prompt, history);
+        const aiResponse = await ai.generateText(prompt, history, false);
         
         await bot.sendMessage(chatId, aiResponse);
-        await addMessage(user.id, 'user', `[Sent file: ${fileName}]`);
+        await addMessage(user.id, 'user', `[Sent file: ${fileName}] ${msg.caption || ''}`);
         await addMessage(user.id, 'assistant', aiResponse);
 
-      } catch (error) {
+      } catch (error: any) {
         console.error(error);
-        await bot.sendMessage(chatId, '❌ Error processing the document.');
+        if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+           await bot.sendMessage(chatId, '❌ Your Hugging Face API Key is no longer working. Please set a new one using /settings.');
+        } else {
+           await bot.sendMessage(chatId, '❌ Error processing the document.');
+        }
       }
     }
   });
