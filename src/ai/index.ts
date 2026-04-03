@@ -14,7 +14,6 @@ export class ModelManager {
    */
   async validateApiKey(): Promise<boolean> {
     try {
-      // Use the official whoami endpoint to reliably check if the token is valid
       const response = await fetch('https://huggingface.co/api/whoami-v2', {
         headers: {
           Authorization: `Bearer ${this.apiKey}`
@@ -40,12 +39,12 @@ export class ModelManager {
     const lowerPrompt = prompt.toLowerCase();
     
     // Fast keyword-based routing for immediate response
-    const imageKeywords = ['generate image', 'create image', 'draw', 'picture of', 'photo of', 'render'];
+    const imageKeywords = ['generate image', 'create image', 'draw', 'picture of', 'photo of', 'render', 'generate a picture', 'imagine'];
     if (imageKeywords.some(kw => lowerPrompt.includes(kw))) {
       return 'image_generation';
     }
 
-    const codeKeywords = ['write code', 'script', 'python', 'javascript', 'html', 'css', 'react', 'debug', 'function', 'json'];
+    const codeKeywords = ['write code', 'script', 'python', 'javascript', 'html', 'css', 'react', 'debug', 'function', 'json', 'typescript', 'c++', 'java'];
     if (codeKeywords.some(kw => lowerPrompt.includes(kw))) {
       return 'code_generation';
     }
@@ -65,19 +64,29 @@ export class ModelManager {
   }
 
   /**
+   * Transcribes audio/voice messages using Whisper.
+   */
+  async transcribeAudio(audioBlob: Blob): Promise<string> {
+    const response = await this.hf.automaticSpeechRecognition({
+      model: 'openai/whisper-large-v3-turbo',
+      data: audioBlob,
+    });
+    return response.text;
+  }
+
+  /**
    * Generates text or code using a powerful, free instruction-tuned model.
    */
   async generateText(prompt: string, history: {role: string, content: string}[], isCode: boolean = false): Promise<string> {
     // Using Qwen2.5-72B-Instruct for extremely high quality, reliable, and fast text/code generation
     const model = 'Qwen/Qwen2.5-72B-Instruct';
     
+    const systemPrompt = isCode 
+      ? 'You are Hugging Face AI, an expert AI programmer developed by AadityaLabs AI. Write clean, efficient code. Always wrap your code in markdown blocks (e.g., ```python) so it can be easily copied.' 
+      : 'You are Hugging Face AI, an advanced, highly intelligent conversational assistant developed by AadityaLabs AI. You are helpful, creative, clever, and friendly. Answer naturally and concisely like a human would in a Telegram chat.';
+
     const messages: {role: 'system' | 'user' | 'assistant', content: string}[] = [
-      {
-        role: 'system',
-        content: isCode 
-          ? 'You are an expert programmer. Write clean, efficient code. Always wrap your code in markdown blocks (e.g., ```python) so it can be easily copied.' 
-          : 'You are a highly intelligent, helpful, and accurate AI assistant.'
-      }
+      { role: 'system', content: systemPrompt }
     ];
 
     // Append history

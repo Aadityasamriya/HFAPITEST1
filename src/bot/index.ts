@@ -17,19 +17,22 @@ export async function startBot(token: string) {
 
     if (user.hf_api_key) {
       const welcomeBack = `
-🚀 <b>Welcome back to Hugging Face By AadityaLabs AI!</b>
+🚀 <b>Welcome back to Hugging Face AI!</b>
 
 Your API key is already configured and you are ready to go.
-Just send me a message, ask me to generate an image, write some code, or send a file/photo to analyze!
+Just send me a message, ask me to generate an image, write some code, or send a file/photo/voice note to analyze!
 
-<i>Use /settings to manage your account or /newchat to clear the current conversation.</i>
+<i>Use /settings to manage your account or /newchat to clear the current conversation memory.</i>
       `;
       await bot.sendMessage(chatId, welcomeBack, { parse_mode: 'HTML' });
     } else {
       const welcomeMessage = `
-🚀 <b>Welcome to Hugging Face By AadityaLabs AI!</b>
+🚀 <b>Welcome to Hugging Face AI!</b>
+<i>Developed by AadityaLabs AI</i>
 
-I am an advanced AI assistant powered by the best open-source models on Hugging Face. I can chat, generate stunning images, write code, and analyze files.
+I am an advanced, Ultra Pro Max AI assistant powered by the best open-source models on Hugging Face. I work exactly like ChatGPT, but right here in Telegram! 
+
+I have memory, I can generate stunning images, write code, analyze files, and even listen to your voice notes.
 
 <b>To get started, you need to set up your Hugging Face API Key:</b>
 1. Go to <a href="https://huggingface.co/settings/tokens">huggingface.co/settings/tokens</a> and create an account if you don't have one.
@@ -85,7 +88,7 @@ I am an advanced AI assistant powered by the best open-source models on Hugging 
     const chatId = msg.chat.id;
     const user = await getUser(chatId.toString());
     await clearChatHistory(user.id);
-    await bot.sendMessage(chatId, "🧹 <b>Chat history cleared.</b> Let's start fresh!", { parse_mode: 'HTML' });
+    await bot.sendMessage(chatId, "🧹 <b>Memory cleared.</b> Let's start a fresh conversation!", { parse_mode: 'HTML' });
   });
 
   bot.onText(/\/resetdb/, async (msg) => {
@@ -196,7 +199,8 @@ I am an advanced AI assistant powered by the best open-source models on Hugging 
           await addMessage(user.id, 'assistant', '[Image Generated]');
         } else {
           const isCode = intent === 'code_generation';
-          const history = await getChatHistory(user.id, 5);
+          // Fetch last 10 messages for deep memory context
+          const history = await getChatHistory(user.id, 10);
           const response = await ai.generateText(text, history, isCode);
           await bot.sendMessage(chatId, response, { parse_mode: isCode ? 'Markdown' : undefined });
           await addMessage(user.id, 'assistant', response);
@@ -209,6 +213,39 @@ I am an advanced AI assistant powered by the best open-source models on Hugging 
            await bot.sendMessage(chatId, '⏳ <i>The AI model is currently loading on Hugging Face servers. Please try again in 10-20 seconds.</i>', { parse_mode: 'HTML' });
         } else {
            await bot.sendMessage(chatId, '❌ <b>Error processing your request.</b> The model might be overloaded or temporarily unavailable. Please try again in a moment.', { parse_mode: 'HTML' });
+        }
+      }
+    } else if (msg.voice || msg.audio) {
+      await bot.sendChatAction(chatId, 'typing');
+      try {
+        const ai = new ModelManager(user.hf_api_key);
+        const fileId = msg.voice ? msg.voice.file_id : msg.audio!.file_id;
+        const fileLink = await bot.getFileLink(fileId);
+        
+        await bot.sendMessage(chatId, '🎙️ <i>Listening to your audio...</i>', { parse_mode: 'HTML' });
+        
+        const response = await fetch(fileLink);
+        const blob = await response.blob();
+        
+        const transcribedText = await ai.transcribeAudio(blob);
+        
+        await bot.sendMessage(chatId, `🗣️ <b>You said:</b> "${transcribedText}"\n\n<i>Thinking...</i>`, { parse_mode: 'HTML' });
+        
+        await addMessage(user.id, 'user', `[Voice Note]: ${transcribedText}`);
+        
+        // Fetch history and generate response based on transcribed text
+        const history = await getChatHistory(user.id, 10);
+        const aiResponse = await ai.generateText(transcribedText, history, false);
+        
+        await bot.sendMessage(chatId, aiResponse);
+        await addMessage(user.id, 'assistant', aiResponse);
+
+      } catch (error: any) {
+        console.error(error);
+        if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+           await bot.sendMessage(chatId, '❌ <b>Your Hugging Face API Key is no longer working.</b> Please set a new one using /settings.', { parse_mode: 'HTML' });
+        } else {
+           await bot.sendMessage(chatId, '❌ <b>Error processing audio.</b> The transcription model might be temporarily unavailable.', { parse_mode: 'HTML' });
         }
       }
     } else if (msg.photo) {
@@ -281,7 +318,7 @@ I am an advanced AI assistant powered by the best open-source models on Hugging 
 
         const prompt = `I have extracted the following content from a file named ${fileName}. Please analyze it and provide a summary or answer my question about it.\n\nContent:\n${extractedText.substring(0, 4000)}\n\nUser Question: ${msg.caption || 'What is this file about?'}`;
         
-        const history = await getChatHistory(user.id, 5);
+        const history = await getChatHistory(user.id, 10);
         const aiResponse = await ai.generateText(prompt, history, false);
         
         await bot.sendMessage(chatId, aiResponse);
