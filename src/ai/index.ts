@@ -54,15 +54,12 @@ export class ModelManager {
   }
 
   /**
-   * Generates high-quality images using SDXL.
+   * Generates high-quality images using FLUX.1-schnell (very fast and reliable).
    */
   async generateImage(prompt: string): Promise<Blob> {
     const response = await this.hf.textToImage({
       inputs: prompt,
-      model: 'stabilityai/stable-diffusion-xl-base-1.0',
-      parameters: {
-        negative_prompt: 'blurry, bad quality, distorted, ugly, deformed, text, watermark'
-      }
+      model: 'black-forest-labs/FLUX.1-schnell',
     });
     return response as unknown as Blob;
   }
@@ -71,39 +68,50 @@ export class ModelManager {
    * Generates text or code using a powerful, free instruction-tuned model.
    */
   async generateText(prompt: string, history: {role: string, content: string}[], isCode: boolean = false): Promise<string> {
-    // Using Mixtral for high-quality, fast, and free text/code generation
-    const model = 'mistralai/Mixtral-8x7B-Instruct-v0.1';
+    // Using Qwen2.5-72B-Instruct for extremely high quality, reliable, and fast text/code generation
+    const model = 'Qwen/Qwen2.5-72B-Instruct';
     
-    let formattedPrompt = '<s>[INST] You are a highly intelligent, helpful, and accurate AI assistant. ';
-    if (isCode) {
-      formattedPrompt += 'The user wants you to write code. Provide the code in markdown blocks so it can be easily copied. ';
-    }
-    formattedPrompt += '[/INST] Understood.</s>\n';
+    const messages: {role: 'system' | 'user' | 'assistant', content: string}[] = [
+      {
+        role: 'system',
+        content: isCode 
+          ? 'You are an expert programmer. Write clean, efficient code. Always wrap your code in markdown blocks (e.g., ```python) so it can be easily copied.' 
+          : 'You are a highly intelligent, helpful, and accurate AI assistant.'
+      }
+    ];
 
     // Append history
     for (const msg of history.reverse()) {
-      if (msg.role === 'user') {
-        formattedPrompt += `[INST] ${msg.content} [/INST]\n`;
-      } else {
-        formattedPrompt += `${msg.content}\n`;
-      }
+      messages.push({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      });
     }
     
     // Append current prompt
-    formattedPrompt += `[INST] ${prompt} [/INST]\n`;
+    messages.push({ role: 'user', content: prompt });
 
-    const response = await this.hf.textGeneration({
-      model: model,
-      inputs: formattedPrompt,
-      parameters: {
-        max_new_tokens: 1024,
-        temperature: isCode ? 0.2 : 0.7, // Lower temp for code to be more precise
-        return_full_text: false,
-        top_p: 0.95
-      }
-    });
-    
-    return response.generated_text.trim();
+    try {
+      const response = await this.hf.chatCompletion({
+        model: model,
+        messages: messages,
+        max_tokens: 1500,
+        temperature: isCode ? 0.2 : 0.7,
+      });
+      
+      return response.choices[0].message.content?.trim() || 'No response generated.';
+    } catch (error: any) {
+      console.error('Primary model failed, trying fallback...', error.message);
+      // Fallback to a smaller, highly available model if the large one is busy
+      const fallbackModel = 'meta-llama/Meta-Llama-3-8B-Instruct';
+      const fallbackResponse = await this.hf.chatCompletion({
+        model: fallbackModel,
+        messages: messages,
+        max_tokens: 1024,
+        temperature: isCode ? 0.2 : 0.7,
+      });
+      return fallbackResponse.choices[0].message.content?.trim() || 'No response generated.';
+    }
   }
 
   /**
@@ -124,6 +132,6 @@ export class ModelManager {
       return await this.generateText(llmPrompt, []);
     }
     
-    return `Here is what I see in the image: ${caption}`;
+    return `👁️ Here is what I see in the image: ${caption}`;
   }
 }
