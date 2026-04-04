@@ -50,26 +50,6 @@ export class ModelManager {
   }
 
   /**
-   * Classifies the user's intent to route to the correct specialized model.
-   */
-  async classifyIntent(prompt: string): Promise<'image_generation' | 'code_generation' | 'conversation'> {
-    const lowerPrompt = prompt.toLowerCase();
-    
-    // Fast keyword-based routing for immediate response
-    const imageKeywords = ['generate image', 'create image', 'draw', 'picture of', 'photo of', 'render', 'generate a picture', 'imagine'];
-    if (imageKeywords.some(kw => lowerPrompt.includes(kw))) {
-      return 'image_generation';
-    }
-
-    const codeKeywords = ['write code', 'script', 'python', 'javascript', 'html', 'css', 'react', 'debug', 'function', 'json', 'typescript', 'c++', 'java'];
-    if (codeKeywords.some(kw => lowerPrompt.includes(kw))) {
-      return 'code_generation';
-    }
-
-    return 'conversation';
-  }
-
-  /**
    * Generates high-quality images using FLUX.1-schnell (very fast and reliable).
    */
   async generateImage(prompt: string): Promise<Blob> {
@@ -145,20 +125,31 @@ export class ModelManager {
   /**
    * Generates text or code using a powerful, free instruction-tuned model.
    */
-  async generateText(prompt: string, history: {role: string, content: string}[], isCode: boolean = false): Promise<string> {
-    // Using Qwen2.5-72B-Instruct for extremely high quality, reliable, and fast text/code generation
-    const model = 'Qwen/Qwen2.5-72B-Instruct';
+  async generateText(prompt: string, history: {role: string, content: string}[]): Promise<string> {
+    // Using Llama-3.3-70B-Instruct as the primary model for extremely high quality, reliable, and fast text/code generation
+    const model = 'meta-llama/Llama-3.3-70B-Instruct';
     
     const currentDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
-    const systemPrompt = isCode 
-      ? `You are Hugging Face AI, an elite, frontier-level AI programmer developed by AadityaLabs AI. Today is ${currentDate}. You rival the coding capabilities of Claude 3.5 Sonnet and GPT-4o. Write clean, efficient, and production-ready code. Always wrap your code in markdown blocks (e.g., \`\`\`python) so it can be easily copied. Explain your code briefly and clearly.` 
-      : `You are Hugging Face AI, an elite, frontier-level conversational assistant developed by AadityaLabs AI, designed to compete with and exceed ChatGPT, Claude, and Gemini. Today is ${currentDate}. 
+    const systemPrompt = `You are Hugging Face AI, an elite, frontier-level autonomous AI agent developed by AadityaLabs AI. You are designed to compete with and exceed the capabilities of ChatGPT-4o, Claude 3.5 Sonnet, and Gemini 1.5 Pro. Today is ${currentDate}. 
 You act as a highly intelligent, empathetic, and omniscient companion on Telegram.
-You have ULTRA PRO MAX capabilities!
-1. UI Elements: Generate buttons [BUTTON: Text -> URL] and polls [POLL: Question -> Opt1 | Opt2].
-2. Web Search: If you need factual, real-time, or encyclopedic information, output EXACTLY: [WIKI: search term]. The system will pause, search Wikipedia, and provide you the results to continue.
-Use Telegram-friendly Markdown formatting (*bold*, _italics_, \`inline code\`, and \`\`\`code blocks\`\`\`). Use emojis naturally. Provide highly accurate, detailed, and thoughtful answers with step-by-step reasoning for complex problems.`;
+You have ULTRA PRO MAX capabilities! You are a true agent with a "self-thinking mind." You can perform actions by outputting specific tags. The system will intercept these tags, perform the action, and feed the result back to you.
+
+AVAILABLE ACTIONS:
+1. [MESSAGE: text] - Send an intermediate message to the user while you are working (e.g., "I am researching this for you..."). Use this to keep the user updated during complex tasks.
+2. [SEARCH: query] - Search the live web using DuckDuckGo. The system will pause, search the internet, and provide you the snippets. Use this whenever you need up-to-date information, news, or factual data.
+3. [IMAGE: prompt] - Generate a high-quality image, diagram, or drawing. The system will generate it and send it to the user.
+4. [BUTTON: Text -> URL] - Generate a clickable link button in the Telegram chat.
+5. [POLL: Question -> Opt1 | Opt2] - Generate a native Telegram poll.
+
+CRITICAL RULES:
+- If the user asks for an image, drawing, or diagram, DO NOT just give a link or describe it. You MUST use the [IMAGE: prompt] tag to actually generate it.
+- If the user asks you to research, search, or look up something, you MUST use the [SEARCH: query] tag. Always send a [MESSAGE: I'm looking that up...] before searching so the user knows you are working on it.
+- Use Telegram-friendly Markdown formatting (*bold*, _italics_, \`inline code\`, and \`\`\`code blocks\`\`\`). Use emojis naturally and expressively to feel like a real person.
+- You can use Telegram spoiler formatting like ||hidden text|| for surprises or sensitive info.
+- Provide highly accurate, detailed, and thoughtful answers with step-by-step reasoning for complex problems.
+- If the user asks for code, write clean, efficient, and production-ready code wrapped in markdown blocks. Explain the code clearly.
+- You are a proactive agent. Anticipate the user's needs and use your tools (SEARCH, IMAGE, MESSAGE) to provide the most complete and advanced experience possible.`;
 
     const messages: {role: 'system' | 'user' | 'assistant', content: string}[] = [
       { role: 'system', content: systemPrompt }
@@ -181,21 +172,34 @@ Use Telegram-friendly Markdown formatting (*bold*, _italics_, \`inline code\`, a
           model: model,
           messages: messages,
           max_tokens: 1500,
-          temperature: isCode ? 0.2 : 0.7,
+          temperature: 0.5,
         });
         
         return response.choices[0].message.content?.trim() || 'No response generated.';
       } catch (error: any) {
-        console.error('Primary model failed, trying fallback...', error.message);
-        // Fallback to a smaller, highly available model if the large one is busy
-        const fallbackModel = 'meta-llama/Meta-Llama-3-8B-Instruct';
-        const fallbackResponse = await this.hf.chatCompletion({
-          model: fallbackModel,
-          messages: messages,
-          max_tokens: 1024,
-          temperature: isCode ? 0.2 : 0.7,
-        });
-        return fallbackResponse.choices[0].message.content?.trim() || 'No response generated.';
+        console.error('Primary model failed, trying secondary...', error.message);
+        try {
+          // Secondary fallback to Qwen2.5-72B-Instruct
+          const secondaryModel = 'Qwen/Qwen2.5-72B-Instruct';
+          const secondaryResponse = await this.hf.chatCompletion({
+            model: secondaryModel,
+            messages: messages,
+            max_tokens: 1500,
+            temperature: 0.5,
+          });
+          return secondaryResponse.choices[0].message.content?.trim() || 'No response generated.';
+        } catch (secondaryError: any) {
+          console.error('Secondary model failed, trying tertiary...', secondaryError.message);
+          // Tertiary fallback to a smaller, highly available model if the large ones are busy
+          const tertiaryModel = 'meta-llama/Llama-3.1-8B-Instruct';
+          const tertiaryResponse = await this.hf.chatCompletion({
+            model: tertiaryModel,
+            messages: messages,
+            max_tokens: 1024,
+            temperature: 0.5,
+          });
+          return tertiaryResponse.choices[0].message.content?.trim() || 'No response generated.';
+        }
       }
     });
   }

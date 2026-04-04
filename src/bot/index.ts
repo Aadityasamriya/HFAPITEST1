@@ -79,45 +79,102 @@ async function processAndSendAiResponse(bot: TelegramBot, chatId: number | strin
   }
 }
 
-// Agentic Text Generation Loop (handles Web Search)
-async function generateAgenticText(ai: ModelManager, prompt: string, user: any, bot: TelegramBot, chatId: number | string, isCode: boolean): Promise<string> {
+// Agentic Text Generation Loop (handles Web Search, Image Gen, and Multi-message)
+async function generateAgenticText(ai: ModelManager, prompt: string, user: any, bot: TelegramBot, chatId: number | string): Promise<string> {
   let history = await getChatHistory(user.id, 10);
-  let aiResponse = await withContinuousAction(bot, chatId, 'typing', async () => {
-    return await ai.generateText(prompt, history, isCode);
-  });
   
+  // We don't show "Thinking..." immediately, we let the AI decide if it needs to send a status message.
+  bot.sendChatAction(chatId, 'typing').catch(() => {});
+  
+  let currentPrompt = prompt;
+  let finalResponse = "";
   let loopCount = 0;
-  while (aiResponse.includes('[WIKI:') && loopCount < 3) {
-    const match = aiResponse.match(/\[WIKI:\s*(.+?)\]/);
-    if (match) {
-      const query = match[1].trim();
-      const searchMsg = await bot.sendMessage(chatId, `🔍 <i>Searching Wikipedia for "${query}"...</i>`, { parse_mode: 'HTML' });
+  const MAX_LOOPS = 5; // Prevent infinite loops
+
+  while (loopCount < MAX_LOOPS) {
+    let aiResponse = await ai.generateText(currentPrompt, history);
+    
+    // Process [MESSAGE: text] - Send immediate intermediate message
+    const messageRegex = /\[MESSAGE:\s*(.+?)\]/g;
+    let msgMatch;
+    while ((msgMatch = messageRegex.exec(aiResponse)) !== null) {
+      const msgText = msgMatch[1].trim();
+      await sendSafeMarkdown(bot, chatId, msgText);
+      aiResponse = aiResponse.replace(msgMatch[0], '').trim();
+    }
+
+    // Process [IMAGE: prompt] - Generate image inline
+    const imageMatch = aiResponse.match(/\[IMAGE:\s*(.+?)\]/);
+    if (imageMatch) {
+      const imgPrompt = imageMatch[1].trim();
+      await bot.sendMessage(chatId, `🎨 <i>Generating image: ${imgPrompt}...</i>`, { parse_mode: 'HTML' });
+      try {
+        const imageBlob = await ai.generateImage(imgPrompt);
+        const arrayBuffer = await imageBlob.arrayBuffer();
+        await bot.sendPhoto(chatId, Buffer.from(arrayBuffer), { caption: `🎨 ${imgPrompt}` });
+        
+        await addMessage(user.id, 'assistant', `[I generated an image: "${imgPrompt}"]`);
+        currentPrompt = `[System: Image generated successfully for "${imgPrompt}". Continue your response.]`;
+        history = await getChatHistory(user.id, 12);
+        loopCount++;
+        continue;
+      } catch (e) {
+        currentPrompt = `[System: Failed to generate image. Inform the user and continue.]`;
+        history = await getChatHistory(user.id, 12);
+        loopCount++;
+        continue;
+      }
+    }
+
+    // Process [SEARCH: query] - DuckDuckGo HTML Search
+    const searchMatch = aiResponse.match(/\[SEARCH:\s*(.+?)\]/);
+    if (searchMatch) {
+      const query = searchMatch[1].trim();
+      const searchMsg = await bot.sendMessage(chatId, `🔍 <i>Searching the web for "${query}"...</i>`, { parse_mode: 'HTML' });
       
       try {
-        const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`);
-        const wikiData = await wikiRes.json();
-        const summary = wikiData.extract || "No results found on Wikipedia.";
+        // Using DuckDuckGo HTML search for free web search
+        const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        const html = await res.text();
         
+        // Simple regex extraction of snippets (since we don't have cheerio)
+        const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/g;
+        let snippets = [];
+        let sMatch;
+        while ((sMatch = snippetRegex.exec(html)) !== null && snippets.length < 3) {
+          snippets.push(sMatch[1].replace(/<[^>]+>/g, '').trim());
+        }
+        
+        const summary = snippets.length > 0 ? snippets.join('\n\n') : "No relevant search results found.";
+        
+        // Save the AI's intent to search
         await addMessage(user.id, 'assistant', aiResponse);
-        await addMessage(user.id, 'system', `[Search Results for "${query}"]: ${summary}`);
+        // Feed the results back
+        await addMessage(user.id, 'system', `[Web Search Results for "${query}"]:\n${summary}`);
         
         await bot.deleteMessage(chatId, searchMsg.message_id).catch(() => {});
         
+        currentPrompt = `Search results:\n${summary}\n\nPlease continue your answer based on these results.`;
         history = await getChatHistory(user.id, 12);
-        aiResponse = await withContinuousAction(bot, chatId, 'typing', async () => {
-          return await ai.generateText(`Search results: ${summary}\n\nPlease continue your answer.`, history, isCode);
-        });
+        loopCount++;
+        continue;
       } catch (e) {
         await bot.deleteMessage(chatId, searchMsg.message_id).catch(() => {});
-        aiResponse = aiResponse.replace(match[0], `[Search failed]`);
-        break;
+        currentPrompt = `[System: Web search failed. Inform the user and answer based on your existing knowledge.]`;
+        history = await getChatHistory(user.id, 12);
+        loopCount++;
+        continue;
       }
-    } else {
-      break;
     }
-    loopCount++;
+
+    // If no action tags are found, this is the final response
+    finalResponse = aiResponse;
+    break;
   }
-  return aiResponse;
+
+  return finalResponse;
 }
 
 export async function startBot(token: string) {
@@ -399,61 +456,36 @@ Here is what I can do for you:
     if (text) {
       try {
         const ai = new ModelManager(user.hf_api_key);
-        const intent = await ai.classifyIntent(text);
 
         await addMessage(user.id, 'user', text);
 
-        if (intent === 'image_generation') {
-          await bot.sendMessage(chatId, '🎨 <i>Generating image, please wait...</i>', { parse_mode: 'HTML' });
-          
-          const imageBlob = await withContinuousAction(bot, chatId, 'upload_photo', async () => {
-            return await ai.generateImage(text);
-          });
-          
-          const arrayBuffer = await imageBlob.arrayBuffer();
-          const buffer = Buffer.from(arrayBuffer);
-          await bot.sendPhoto(chatId, buffer, { 
-            caption: `🎨 <b>Prompt:</b> ${text}\n\n✨ <i>Generated by Hugging Face AI</i>`, 
-            parse_mode: 'HTML' 
-          });
-          
-          // Coordinate memory: Tell the text model what image was just generated
-          await addMessage(user.id, 'assistant', `[I generated an image for the user based on the prompt: "${text}"]`);
-        } else {
-          const isCode = intent === 'code_generation';
-          
-          // URL Extraction & Reading
-          let enhancedPrompt = text;
-          const urlRegex = /(https?:\/\/[^\s]+)/g;
-          const urls = text.match(urlRegex);
-          if (urls && urls.length > 0) {
-            const url = urls[0];
-            const readingMsg = await bot.sendMessage(chatId, `🌐 <i>Reading webpage: ${url}...</i>`, { parse_mode: 'HTML' });
-            try {
-              const res = await fetch(url);
-              const html = await res.text();
-              const textContent = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-                                      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-                                      .replace(/<[^>]+>/g, ' ')
-                                      .replace(/\s+/g, ' ')
-                                      .substring(0, 5000);
-              enhancedPrompt = `User provided a link: ${url}\n\nExtracted Webpage Content:\n${textContent}\n\nUser's message: ${text}`;
-            } catch (e) {
-              enhancedPrompt = `User provided a link: ${url} but I couldn't read it. User's message: ${text}`;
-            }
-            await bot.deleteMessage(chatId, readingMsg.message_id).catch(() => {});
+        // URL Extraction & Reading
+        let enhancedPrompt = text;
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const urls = text.match(urlRegex);
+        if (urls && urls.length > 0) {
+          const url = urls[0];
+          const readingMsg = await bot.sendMessage(chatId, `🌐 <i>Reading webpage: ${url}...</i>`, { parse_mode: 'HTML' });
+          try {
+            const res = await fetch(url);
+            const html = await res.text();
+            const textContent = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                                    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+                                    .replace(/<[^>]+>/g, ' ')
+                                    .replace(/\s+/g, ' ')
+                                    .substring(0, 5000);
+            enhancedPrompt = `User provided a link: ${url}\n\nExtracted Webpage Content:\n${textContent}\n\nUser's message: ${text}`;
+          } catch (e) {
+            enhancedPrompt = `User provided a link: ${url} but I couldn't read it. User's message: ${text}`;
           }
-          
-          const thinkingMsg = await bot.sendMessage(chatId, '🧠 <i>Thinking...</i>', { parse_mode: 'HTML' });
-          
-          const response = await generateAgenticText(ai, enhancedPrompt, user, bot, chatId, isCode);
-          
-          await bot.deleteMessage(chatId, thinkingMsg.message_id).catch(() => {});
-          
-          // Use safe Markdown sending for beautiful formatting
-          await processAndSendAiResponse(bot, chatId, response);
-          await addMessage(user.id, 'assistant', response);
+          await bot.deleteMessage(chatId, readingMsg.message_id).catch(() => {});
         }
+        
+        const response = await generateAgenticText(ai, enhancedPrompt, user, bot, chatId);
+        
+        // Use safe Markdown sending for beautiful formatting
+        await processAndSendAiResponse(bot, chatId, response);
+        await addMessage(user.id, 'assistant', response);
       } catch (error: any) {
         console.error(error);
         if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Invalid token'))) {
@@ -490,7 +522,7 @@ Here is what I can do for you:
         // Instruct the AI to be concise and use the same language
         const voicePrompt = `[Voice Note from User]: "${transcribedText}"\n\nInstruction: Reply to this voice note in the EXACT SAME LANGUAGE the user spoke. Keep your response concise, friendly, and conversational, as it will be converted to a voice message. Do not use code blocks or complex markdown.`;
         
-        const aiResponse = await generateAgenticText(ai, voicePrompt, user, bot, chatId, false);
+        const aiResponse = await generateAgenticText(ai, voicePrompt, user, bot, chatId);
         
         await processAndSendAiResponse(bot, chatId, aiResponse);
         await addMessage(user.id, 'assistant', aiResponse);
@@ -602,7 +634,7 @@ Here is what I can do for you:
         
         const thinkingMsg = await bot.sendMessage(chatId, '🧠 <i>Analyzing document...</i>', { parse_mode: 'HTML' });
         
-        const aiResponse = await generateAgenticText(ai, prompt, user, bot, chatId, false);
+        const aiResponse = await generateAgenticText(ai, prompt, user, bot, chatId);
         
         await bot.deleteMessage(chatId, thinkingMsg.message_id).catch(() => {});
         
