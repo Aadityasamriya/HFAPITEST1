@@ -7,8 +7,127 @@ const waitingForApiKey = new Set<number>();
 // State to track if admin is broadcasting
 const waitingForBroadcast = new Set<number>();
 
+// Helper to safely send Markdown messages (fallback to plain text if Markdown fails)
+async function sendSafeMarkdown(bot: TelegramBot, chatId: number | string, text: string, options?: TelegramBot.SendMessageOptions) {
+  try {
+    await bot.sendMessage(chatId, text, { parse_mode: 'Markdown', ...options });
+  } catch (e: any) {
+    if (e.message && e.message.includes('parse entities')) {
+      // Fallback to plain text if Markdown is malformed
+      await bot.sendMessage(chatId, text, options);
+    } else {
+      throw e;
+    }
+  }
+}
+
+// Helper to keep sending chat actions (typing, upload_photo, etc.) for long-running tasks
+async function withContinuousAction<T>(bot: TelegramBot, chatId: number | string, action: TelegramBot.ChatAction, fn: () => Promise<T>): Promise<T> {
+  let isDone = false;
+  const interval = setInterval(() => {
+    if (!isDone) {
+      bot.sendChatAction(chatId, action).catch(() => {});
+    }
+  }, 4000); // Telegram chat actions expire after 5 seconds, so we renew every 4s
+
+  try {
+    await bot.sendChatAction(chatId, action);
+    return await fn();
+  } finally {
+    isDone = true;
+    clearInterval(interval);
+  }
+}
+
+// Helper to parse AI response for UI elements (Buttons, Polls) and send them
+async function processAndSendAiResponse(bot: TelegramBot, chatId: number | string, aiResponse: string) {
+  let cleanResponse = aiResponse;
+  const inlineKeyboard: TelegramBot.InlineKeyboardButton[][] = [];
+  const polls: { question: string, options: string[] }[] = [];
+
+  // Extract buttons: [BUTTON: Text -> URL]
+  const buttonRegex = /\[BUTTON:\s*(.+?)\s*->\s*(https?:\/\/[^\s\]]+)\s*\]/g;
+  let match;
+  while ((match = buttonRegex.exec(aiResponse)) !== null) {
+    inlineKeyboard.push([{ text: match[1].trim(), url: match[2].trim() }]);
+    cleanResponse = cleanResponse.replace(match[0], '').trim();
+  }
+
+  // Extract polls: [POLL: Question -> Opt1 | Opt2]
+  const pollRegex = /\[POLL:\s*(.+?)\s*->\s*(.+?)\]/g;
+  while ((match = pollRegex.exec(aiResponse)) !== null) {
+    const question = match[1].trim();
+    const options = match[2].split('|').map(o => o.trim()).filter(o => o.length > 0);
+    if (options.length >= 2 && options.length <= 10) {
+      polls.push({ question, options });
+    }
+    cleanResponse = cleanResponse.replace(match[0], '').trim();
+  }
+
+  // Send the main text message (with buttons if any)
+  if (cleanResponse.length > 0 || inlineKeyboard.length > 0) {
+    const opts: TelegramBot.SendMessageOptions = {};
+    if (inlineKeyboard.length > 0) {
+      opts.reply_markup = { inline_keyboard: inlineKeyboard };
+    }
+    await sendSafeMarkdown(bot, chatId, cleanResponse || 'Here you go!', opts);
+  }
+
+  // Send any polls
+  for (const poll of polls) {
+    await bot.sendPoll(chatId, poll.question, poll.options, { is_anonymous: false });
+  }
+}
+
+// Agentic Text Generation Loop (handles Web Search)
+async function generateAgenticText(ai: ModelManager, prompt: string, user: any, bot: TelegramBot, chatId: number | string, isCode: boolean): Promise<string> {
+  let history = await getChatHistory(user.id, 10);
+  let aiResponse = await withContinuousAction(bot, chatId, 'typing', async () => {
+    return await ai.generateText(prompt, history, isCode);
+  });
+  
+  let loopCount = 0;
+  while (aiResponse.includes('[WIKI:') && loopCount < 3) {
+    const match = aiResponse.match(/\[WIKI:\s*(.+?)\]/);
+    if (match) {
+      const query = match[1].trim();
+      const searchMsg = await bot.sendMessage(chatId, `🔍 <i>Searching Wikipedia for "${query}"...</i>`, { parse_mode: 'HTML' });
+      
+      try {
+        const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`);
+        const wikiData = await wikiRes.json();
+        const summary = wikiData.extract || "No results found on Wikipedia.";
+        
+        await addMessage(user.id, 'assistant', aiResponse);
+        await addMessage(user.id, 'system', `[Search Results for "${query}"]: ${summary}`);
+        
+        await bot.deleteMessage(chatId, searchMsg.message_id).catch(() => {});
+        
+        history = await getChatHistory(user.id, 12);
+        aiResponse = await withContinuousAction(bot, chatId, 'typing', async () => {
+          return await ai.generateText(`Search results: ${summary}\n\nPlease continue your answer.`, history, isCode);
+        });
+      } catch (e) {
+        await bot.deleteMessage(chatId, searchMsg.message_id).catch(() => {});
+        aiResponse = aiResponse.replace(match[0], `[Search failed]`);
+        break;
+      }
+    } else {
+      break;
+    }
+    loopCount++;
+  }
+  return aiResponse;
+}
+
 export async function startBot(token: string) {
-  const bot = new TelegramBot(token, { polling: true });
+  const bot = new TelegramBot(token, { 
+    polling: {
+      params: {
+        allowed_updates: ['message', 'callback_query', 'message_reaction']
+      }
+    } 
+  });
   const adminId = process.env.ADMIN_TELEGRAM_ID;
 
   bot.onText(/\/start/, async (msg) => {
@@ -22,7 +141,7 @@ export async function startBot(token: string) {
 Your API key is already configured and you are ready to go.
 Just send me a message, ask me to generate an image, write some code, or send a file/photo/voice note to analyze!
 
-<i>Use /settings to manage your account or /newchat to clear the current conversation memory.</i>
+<i>Use /help to see everything I can do!</i>
       `;
       await bot.sendMessage(chatId, welcomeBack, { parse_mode: 'HTML' });
     } else {
@@ -43,6 +162,33 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
       `;
       await bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'HTML', disable_web_page_preview: true });
     }
+  });
+
+  bot.onText(/\/help/, async (msg) => {
+    const chatId = msg.chat.id;
+    const helpMessage = `
+🤖 <b>Hugging Face AI - Ultra Pro Max Features</b>
+
+Here is what I can do for you:
+
+💬 <b>Smart Chat & Memory:</b> Just talk to me! I remember our last 10 messages.
+🌐 <b>Web Search & Reading:</b> I can search Wikipedia or read links you send me!
+🎨 <b>Image Generation:</b> Say "generate an image of..." or "draw a..."
+💻 <b>Code Generation:</b> Ask me to write code in any language.
+🎙️ <b>Voice Recognition:</b> Send me a voice note, and I will transcribe and reply to it!
+🔊 <b>Text-to-Speech:</b> Use <code>/tts [text]</code> to make me speak!
+👁️ <b>Vision:</b> Send me a photo and ask me questions about it.
+📄 <b>Document Analysis:</b> Send me a PDF, ZIP, TXT, CSV, or code file and I will read it!
+
+<b>Commands:</b>
+/start - Start the bot
+/help - Show this message
+/settings - Manage your API Key and Database
+/newchat or /clear - Clear my memory of our current conversation
+/tts [text] - Convert text to speech
+/stats - View your usage statistics (Admin only)
+    `;
+    await bot.sendMessage(chatId, helpMessage, { parse_mode: 'HTML' });
   });
 
   bot.onText(/\/settings/, async (msg) => {
@@ -84,7 +230,7 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
     await bot.sendMessage(chatId, messageText, opts);
   });
 
-  bot.onText(/\/newchat/, async (msg) => {
+  bot.onText(/\/(newchat|clear)/, async (msg) => {
     const chatId = msg.chat.id;
     const user = await getUser(chatId.toString());
     await clearChatHistory(user.id);
@@ -96,6 +242,39 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
     const user = await getUser(chatId.toString());
     await resetDatabase(user.id);
     await bot.sendMessage(chatId, '💥 <b>Database reset successfully.</b> All your data and API keys have been deleted.', { parse_mode: 'HTML' });
+  });
+
+  bot.onText(/\/tts (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const textToSpeak = match ? match[1] : '';
+    
+    if (!textToSpeak) {
+      await bot.sendMessage(chatId, '⚠️ Please provide text. Example: <code>/tts Hello world!</code>', { parse_mode: 'HTML' });
+      return;
+    }
+
+    const user = await getUser(chatId.toString());
+    if (!user.hf_api_key) {
+      await bot.sendMessage(chatId, '⚠️ <b>Please set your Hugging Face API Key first</b> using the /settings command.', { parse_mode: 'HTML' });
+      return;
+    }
+
+    try {
+      const ai = new ModelManager(user.hf_api_key);
+      await bot.sendMessage(chatId, '🔊 <i>Generating audio...</i>', { parse_mode: 'HTML' });
+      
+      const audioBlob = await withContinuousAction(bot, chatId, 'record_voice', async () => {
+        const langCode = await ai.detectLanguage(textToSpeak);
+        return await ai.generateAudio(textToSpeak, langCode);
+      });
+      
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      await bot.sendVoice(chatId, buffer);
+    } catch (error: any) {
+      console.error(error);
+      await bot.sendMessage(chatId, '❌ <b>Failed to generate audio.</b> The TTS model might be temporarily unavailable.', { parse_mode: 'HTML' });
+    }
   });
 
   // Admin Commands
@@ -132,12 +311,47 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
     await bot.answerCallbackQuery(callbackQuery.id);
   });
 
+  bot.onText(/\/cancel/, async (msg) => {
+    const chatId = msg.chat.id;
+    if (waitingForApiKey.has(chatId) || waitingForBroadcast.has(chatId)) {
+      waitingForApiKey.delete(chatId);
+      waitingForBroadcast.delete(chatId);
+      await bot.sendMessage(chatId, '🚫 <b>Operation cancelled.</b>', { parse_mode: 'HTML' });
+    } else {
+      await bot.sendMessage(chatId, 'Nothing to cancel.', { parse_mode: 'HTML' });
+    }
+  });
+
+  // Handle user reactions to messages
+  bot.on('message_reaction' as any, async (reaction: any) => {
+    try {
+      const chatId = reaction.chat.id;
+      const user = await getUser(chatId.toString());
+      
+      if (reaction.new_reaction && reaction.new_reaction.length > 0) {
+        const emojis = reaction.new_reaction.filter((r: any) => r.type === 'emoji').map((r: any) => r.emoji).join(', ');
+        if (emojis) {
+          // Coordinate memory: Save the reaction so the AI knows the user's emotion/response
+          await addMessage(user.id, 'user', `[User reacted to your message with: ${emojis}]`);
+        }
+      }
+    } catch (e) {
+      console.error('Error handling reaction:', e);
+    }
+  });
+
   bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
 
     // Ignore commands
     if (text && text.startsWith('/')) return;
+
+    // Handle unsupported message types gracefully
+    if (msg.video || msg.sticker || msg.location || msg.contact) {
+      await bot.sendMessage(chatId, '🙏 <b>Sorry!</b> I currently only support text, photos, voice notes, and documents (PDF/ZIP/Code).', { parse_mode: 'HTML' });
+      return;
+    }
 
     // Admin Broadcast Logic
     if (waitingForBroadcast.has(chatId) && text && adminId && chatId.toString() === adminId) {
@@ -183,7 +397,6 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
     }
 
     if (text) {
-      await bot.sendChatAction(chatId, 'typing');
       try {
         const ai = new ModelManager(user.hf_api_key);
         const intent = await ai.classifyIntent(text);
@@ -192,17 +405,53 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
 
         if (intent === 'image_generation') {
           await bot.sendMessage(chatId, '🎨 <i>Generating image, please wait...</i>', { parse_mode: 'HTML' });
-          const imageBlob = await ai.generateImage(text);
+          
+          const imageBlob = await withContinuousAction(bot, chatId, 'upload_photo', async () => {
+            return await ai.generateImage(text);
+          });
+          
           const arrayBuffer = await imageBlob.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
-          await bot.sendPhoto(chatId, buffer);
-          await addMessage(user.id, 'assistant', '[Image Generated]');
+          await bot.sendPhoto(chatId, buffer, { 
+            caption: `🎨 <b>Prompt:</b> ${text}\n\n✨ <i>Generated by Hugging Face AI</i>`, 
+            parse_mode: 'HTML' 
+          });
+          
+          // Coordinate memory: Tell the text model what image was just generated
+          await addMessage(user.id, 'assistant', `[I generated an image for the user based on the prompt: "${text}"]`);
         } else {
           const isCode = intent === 'code_generation';
-          // Fetch last 10 messages for deep memory context
-          const history = await getChatHistory(user.id, 10);
-          const response = await ai.generateText(text, history, isCode);
-          await bot.sendMessage(chatId, response, { parse_mode: isCode ? 'Markdown' : undefined });
+          
+          // URL Extraction & Reading
+          let enhancedPrompt = text;
+          const urlRegex = /(https?:\/\/[^\s]+)/g;
+          const urls = text.match(urlRegex);
+          if (urls && urls.length > 0) {
+            const url = urls[0];
+            const readingMsg = await bot.sendMessage(chatId, `🌐 <i>Reading webpage: ${url}...</i>`, { parse_mode: 'HTML' });
+            try {
+              const res = await fetch(url);
+              const html = await res.text();
+              const textContent = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                                      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+                                      .replace(/<[^>]+>/g, ' ')
+                                      .replace(/\s+/g, ' ')
+                                      .substring(0, 5000);
+              enhancedPrompt = `User provided a link: ${url}\n\nExtracted Webpage Content:\n${textContent}\n\nUser's message: ${text}`;
+            } catch (e) {
+              enhancedPrompt = `User provided a link: ${url} but I couldn't read it. User's message: ${text}`;
+            }
+            await bot.deleteMessage(chatId, readingMsg.message_id).catch(() => {});
+          }
+          
+          const thinkingMsg = await bot.sendMessage(chatId, '🧠 <i>Thinking...</i>', { parse_mode: 'HTML' });
+          
+          const response = await generateAgenticText(ai, enhancedPrompt, user, bot, chatId, isCode);
+          
+          await bot.deleteMessage(chatId, thinkingMsg.message_id).catch(() => {});
+          
+          // Use safe Markdown sending for beautiful formatting
+          await processAndSendAiResponse(bot, chatId, response);
           await addMessage(user.id, 'assistant', response);
         }
       } catch (error: any) {
@@ -216,7 +465,6 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
         }
       }
     } else if (msg.voice || msg.audio) {
-      await bot.sendChatAction(chatId, 'typing');
       try {
         const ai = new ModelManager(user.hf_api_key);
         const fileId = msg.voice ? msg.voice.file_id : msg.audio!.file_id;
@@ -227,18 +475,37 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
         const response = await fetch(fileLink);
         const blob = await response.blob();
         
-        const transcribedText = await ai.transcribeAudio(blob);
+        const transcribedText = await withContinuousAction(bot, chatId, 'typing', async () => {
+          return await ai.transcribeAudio(blob);
+        });
         
         await bot.sendMessage(chatId, `🗣️ <b>You said:</b> "${transcribedText}"\n\n<i>Thinking...</i>`, { parse_mode: 'HTML' });
         
+        // Coordinate memory: Save the transcribed voice note as user input
         await addMessage(user.id, 'user', `[Voice Note]: ${transcribedText}`);
         
         // Fetch history and generate response based on transcribed text
         const history = await getChatHistory(user.id, 10);
-        const aiResponse = await ai.generateText(transcribedText, history, false);
         
-        await bot.sendMessage(chatId, aiResponse);
+        // Instruct the AI to be concise and use the same language
+        const voicePrompt = `[Voice Note from User]: "${transcribedText}"\n\nInstruction: Reply to this voice note in the EXACT SAME LANGUAGE the user spoke. Keep your response concise, friendly, and conversational, as it will be converted to a voice message. Do not use code blocks or complex markdown.`;
+        
+        const aiResponse = await generateAgenticText(ai, voicePrompt, user, bot, chatId, false);
+        
+        await processAndSendAiResponse(bot, chatId, aiResponse);
         await addMessage(user.id, 'assistant', aiResponse);
+
+        // Generate Voice Note Reply
+        await bot.sendMessage(chatId, '🎙️ <i>Recording reply...</i>', { parse_mode: 'HTML' });
+        
+        const audioBlob = await withContinuousAction(bot, chatId, 'record_voice', async () => {
+          const langCode = await ai.detectLanguage(aiResponse);
+          return await ai.generateAudio(aiResponse, langCode);
+        });
+        
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        await bot.sendVoice(chatId, buffer);
 
       } catch (error: any) {
         console.error(error);
@@ -249,20 +516,28 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
         }
       }
     } else if (msg.photo) {
-      await bot.sendChatAction(chatId, 'typing');
       try {
         const ai = new ModelManager(user.hf_api_key);
         const fileId = msg.photo[msg.photo.length - 1].file_id;
         const fileLink = await bot.getFileLink(fileId);
         
+        const thinkingMsg = await bot.sendMessage(chatId, '👁️ <i>Analyzing image...</i>', { parse_mode: 'HTML' });
+        
         const response = await fetch(fileLink);
         const blob = await response.blob();
         
         const caption = msg.caption || 'Describe this image';
-        const analysis = await ai.analyzeImage(blob, caption);
         
-        await bot.sendMessage(chatId, analysis);
-        await addMessage(user.id, 'user', `[Image Sent] ${caption}`);
+        const analysis = await withContinuousAction(bot, chatId, 'typing', async () => {
+          return await ai.analyzeImage(blob, caption);
+        });
+        
+        await bot.deleteMessage(chatId, thinkingMsg.message_id).catch(() => {});
+        
+        await sendSafeMarkdown(bot, chatId, analysis);
+        
+        // Coordinate memory: Save the image description so the text model knows what the user sent
+        await addMessage(user.id, 'user', `[User sent an image. Visual description of the image: "${analysis}". User's caption: "${caption}"]`);
         await addMessage(user.id, 'assistant', analysis);
       } catch (error: any) {
         console.error(error);
@@ -282,7 +557,6 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
         return;
       }
 
-      await bot.sendChatAction(chatId, 'typing');
       try {
         const ai = new ModelManager(user.hf_api_key);
         const fileLink = await bot.getFileLink(fileId);
@@ -298,6 +572,9 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
           const pdfParseFn = pdfParse.default || pdfParse;
           const pdfData = await pdfParseFn(buffer);
           extractedText = pdfData.text;
+        } else if (fileName.match(/\.(txt|md|csv|json|js|py|ts|html|css|cpp|java)$/i)) {
+          await bot.sendMessage(chatId, `📄 <i>Reading ${fileName}...</i>`, { parse_mode: 'HTML' });
+          extractedText = buffer.toString('utf-8');
         } else if (fileName.endsWith('.zip')) {
           await bot.sendMessage(chatId, '🗜️ <i>Analyzing ZIP...</i>', { parse_mode: 'HTML' });
           const AdmZip = (await import('adm-zip')).default;
@@ -307,22 +584,29 @@ I have memory, I can generate stunning images, write code, analyze files, and ev
           extractedText = `ZIP Contents of ${fileName}:\n`;
           zipEntries.forEach((zipEntry) => {
             extractedText += `- ${zipEntry.entryName} (${zipEntry.header.size} bytes)\n`;
-            if (!zipEntry.isDirectory && zipEntry.header.size < 50000 && (zipEntry.entryName.endsWith('.txt') || zipEntry.entryName.endsWith('.md') || zipEntry.entryName.endsWith('.json') || zipEntry.entryName.endsWith('.py') || zipEntry.entryName.endsWith('.js'))) {
+            if (!zipEntry.isDirectory && zipEntry.header.size < 50000 && (zipEntry.entryName.match(/\.(txt|md|csv|json|js|py|ts|html|css)$/i))) {
                extractedText += `  Content preview: ${zipEntry.getData().toString('utf8').substring(0, 200)}...\n`;
             }
           });
         } else {
-          await bot.sendMessage(chatId, '⚠️ <b>Unsupported file type.</b> I can analyze PDF and ZIP files.', { parse_mode: 'HTML' });
+          await bot.sendMessage(chatId, '⚠️ <b>Unsupported file type.</b> I can analyze PDF, ZIP, and plain text/code files.', { parse_mode: 'HTML' });
           return;
         }
 
         const prompt = `I have extracted the following content from a file named ${fileName}. Please analyze it and provide a summary or answer my question about it.\n\nContent:\n${extractedText.substring(0, 4000)}\n\nUser Question: ${msg.caption || 'What is this file about?'}`;
         
-        const history = await getChatHistory(user.id, 10);
-        const aiResponse = await ai.generateText(prompt, history, false);
+        // Coordinate memory: Save the file content so the text model remembers it
+        await addMessage(user.id, 'user', `[User sent a file named ${fileName}. Extracted content preview: "${extractedText.substring(0, 1000)}...". User's caption: "${msg.caption || ''}"]`);
         
-        await bot.sendMessage(chatId, aiResponse);
-        await addMessage(user.id, 'user', `[Sent file: ${fileName}] ${msg.caption || ''}`);
+        const history = await getChatHistory(user.id, 10);
+        
+        const thinkingMsg = await bot.sendMessage(chatId, '🧠 <i>Analyzing document...</i>', { parse_mode: 'HTML' });
+        
+        const aiResponse = await generateAgenticText(ai, prompt, user, bot, chatId, false);
+        
+        await bot.deleteMessage(chatId, thinkingMsg.message_id).catch(() => {});
+        
+        await processAndSendAiResponse(bot, chatId, aiResponse);
         await addMessage(user.id, 'assistant', aiResponse);
 
       } catch (error: any) {
