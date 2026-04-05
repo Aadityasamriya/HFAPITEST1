@@ -10,13 +10,15 @@ async function startServer() {
 
   // Check required environment variables
   if (!process.env.MONGODB_URI) {
-    console.warn('WARNING: MONGODB_URI environment variable is missing.');
-    console.warn('Database features will not work until this is set.');
+    console.error('CRITICAL ERROR: MONGODB_URI environment variable is missing.');
+    console.error('Please set MONGODB_URI in your environment variables to connect to the database.');
+    process.exit(1);
   }
 
   if (!process.env.TELEGRAM_BOT_TOKEN) {
-    console.warn('WARNING: TELEGRAM_BOT_TOKEN environment variable is missing.');
-    console.warn('Telegram bot will not start until this is set.');
+    console.error('CRITICAL ERROR: TELEGRAM_BOT_TOKEN environment variable is missing.');
+    console.error('Please set TELEGRAM_BOT_TOKEN in your environment variables to start the bot.');
+    process.exit(1);
   }
 
   app.use(cors());
@@ -72,15 +74,11 @@ async function startServer() {
   });
 
   // Start the Telegram bot
-  if (process.env.TELEGRAM_BOT_TOKEN) {
-    try {
-      await startBot(process.env.TELEGRAM_BOT_TOKEN);
-      console.log('Telegram bot started successfully');
-    } catch (error) {
-      console.error('Failed to start Telegram bot:', error);
-    }
-  } else {
-    console.warn('Skipping Telegram bot startup because TELEGRAM_BOT_TOKEN is missing.');
+  try {
+    await startBot(process.env.TELEGRAM_BOT_TOKEN);
+    console.log('Telegram bot started successfully');
+  } catch (error) {
+    console.error('Failed to start Telegram bot:', error);
   }
 
   // Vite middleware for development

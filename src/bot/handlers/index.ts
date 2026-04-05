@@ -6,7 +6,8 @@ import { sendSafeMarkdown, withContinuousAction, processAndSendAiResponse } from
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import { PDFParse } from 'pdf-parse';
+// @ts-ignore
+import pdfParse from 'pdf-parse';
 
 export async function handleTextMessage(
   bot: TelegramBot, 
@@ -145,8 +146,7 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
       let extractedText = '';
 
       if (doc.mime_type === 'application/pdf' || doc.file_name?.endsWith('.pdf')) {
-        const parser = new PDFParse({ data: buffer });
-        const pdfData = await parser.getText();
+        const pdfData = await pdfParse(buffer);
         extractedText = pdfData.text;
       } else if (doc.mime_type === 'application/zip' || doc.mime_type === 'application/x-zip-compressed' || doc.file_name?.endsWith('.zip')) {
         const zip = new AdmZip(buffer);
