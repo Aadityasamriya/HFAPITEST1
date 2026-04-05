@@ -80,7 +80,7 @@ async function processAndSendAiResponse(bot: TelegramBot, chatId: number | strin
 }
 
 // Agentic Text Generation Loop (handles Web Search, Image Gen, and Multi-message)
-async function generateAgenticText(ai: ModelManager, prompt: string, user: any, bot: TelegramBot, chatId: number | string): Promise<string> {
+async function generateAgenticText(ai: ModelManager, prompt: string, user: any, userName: string, bot: TelegramBot, chatId: number | string, messageId: number): Promise<string> {
   let history = await getChatHistory(user.id, 10);
   
   // We don't show "Thinking..." immediately, we let the AI decide if it needs to send a status message.
@@ -92,8 +92,28 @@ async function generateAgenticText(ai: ModelManager, prompt: string, user: any, 
   const MAX_LOOPS = 5; // Prevent infinite loops
 
   while (loopCount < MAX_LOOPS) {
-    let aiResponse = await ai.generateText(currentPrompt, history);
+    let aiResponse = await ai.generateText(currentPrompt, history, userName);
     
+    // Process [REACT: emoji] - React to user's message
+    const reactRegex = /\[REACT:\s*(.+?)\]/g;
+    let reactMatch;
+    while ((reactMatch = reactRegex.exec(aiResponse)) !== null) {
+      const emoji = reactMatch[1].trim();
+      try {
+        // Use raw request to ensure compatibility with all node-telegram-bot-api versions
+        await (bot as any)._request('setMessageReaction', {
+          form: {
+            chat_id: chatId,
+            message_id: messageId,
+            reaction: JSON.stringify([{ type: 'emoji', emoji: emoji }])
+          }
+        });
+      } catch (e) {
+        console.error('Failed to set reaction:', e);
+      }
+      aiResponse = aiResponse.replace(reactMatch[0], '').trim();
+    }
+
     // Process [MESSAGE: text] - Send immediate intermediate message
     const messageRegex = /\[MESSAGE:\s*(.+?)\]/g;
     let msgMatch;
@@ -397,6 +417,14 @@ Here is what I can do for you:
     }
   });
 
+  // Handle polling errors gracefully (e.g. invalid token)
+  bot.on('polling_error', (error: any) => {
+    console.error('Telegram Polling Error:', error.message);
+    if (error.message && error.message.includes('401 Unauthorized')) {
+      console.error('CRITICAL: The Telegram Bot Token is invalid or revoked. Please check your TELEGRAM_BOT_TOKEN environment variable.');
+    }
+  });
+
   bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -481,7 +509,7 @@ Here is what I can do for you:
           await bot.deleteMessage(chatId, readingMsg.message_id).catch(() => {});
         }
         
-        const response = await generateAgenticText(ai, enhancedPrompt, user, bot, chatId);
+        const response = await generateAgenticText(ai, enhancedPrompt, user, msg.from?.first_name || 'User', bot, chatId, msg.message_id);
         
         // Use safe Markdown sending for beautiful formatting
         await processAndSendAiResponse(bot, chatId, response);
@@ -522,7 +550,7 @@ Here is what I can do for you:
         // Instruct the AI to be concise and use the same language
         const voicePrompt = `[Voice Note from User]: "${transcribedText}"\n\nInstruction: Reply to this voice note in the EXACT SAME LANGUAGE the user spoke. Keep your response concise, friendly, and conversational, as it will be converted to a voice message. Do not use code blocks or complex markdown.`;
         
-        const aiResponse = await generateAgenticText(ai, voicePrompt, user, bot, chatId);
+        const aiResponse = await generateAgenticText(ai, voicePrompt, user, msg.from?.first_name || 'User', bot, chatId, msg.message_id);
         
         await processAndSendAiResponse(bot, chatId, aiResponse);
         await addMessage(user.id, 'assistant', aiResponse);
@@ -634,7 +662,7 @@ Here is what I can do for you:
         
         const thinkingMsg = await bot.sendMessage(chatId, '🧠 <i>Analyzing document...</i>', { parse_mode: 'HTML' });
         
-        const aiResponse = await generateAgenticText(ai, prompt, user, bot, chatId);
+        const aiResponse = await generateAgenticText(ai, prompt, user, msg.from?.first_name || 'User', bot, chatId, msg.message_id);
         
         await bot.deleteMessage(chatId, thinkingMsg.message_id).catch(() => {});
         
