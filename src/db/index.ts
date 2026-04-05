@@ -23,13 +23,16 @@ export async function getDb(): Promise<Db> {
   return dbInstance;
 }
 
-export async function getUser(telegramId: string) {
+export async function getUser(telegramId: string | number, firstName?: string, username?: string) {
   const db = await getDb();
-  let user = await db.collection('users').findOne({ telegram_id: telegramId });
+  const idStr = telegramId.toString();
+  let user = await db.collection('users').findOne({ telegram_id: idStr });
   
   if (!user) {
     const newUser = {
-      telegram_id: telegramId,
+      telegram_id: idStr,
+      name: firstName || 'User',
+      username: username || '',
       hf_api_key: null,
       created_at: new Date()
     };
@@ -37,14 +40,19 @@ export async function getUser(telegramId: string) {
     user = { _id: result.insertedId, ...newUser };
   }
   
-  // Map _id to id so the rest of the app works without changes
-  return { ...user, id: user._id.toString() };
+  // Map _id to id and hf_api_key to hfApiKey so the rest of the app works without changes
+  return { 
+    ...user, 
+    id: user._id.toString(),
+    hfApiKey: user.hf_api_key,
+    name: user.name
+  };
 }
 
-export async function updateUserApiKey(telegramId: string, apiKey: string) {
+export async function updateUserApiKey(telegramId: string | number, apiKey: string) {
   const db = await getDb();
   await db.collection('users').updateOne(
-    { telegram_id: telegramId },
+    { telegram_id: telegramId.toString() },
     { $set: { hf_api_key: apiKey } }
   );
 }

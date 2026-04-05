@@ -8,6 +8,17 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Check required environment variables
+  if (!process.env.MONGODB_URI) {
+    console.warn('WARNING: MONGODB_URI environment variable is missing.');
+    console.warn('Database features will not work until this is set.');
+  }
+
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    console.warn('WARNING: TELEGRAM_BOT_TOKEN environment variable is missing.');
+    console.warn('Telegram bot will not start until this is set.');
+  }
+
   app.use(cors());
   app.use(express.json());
 
@@ -48,92 +59,12 @@ async function startServer() {
 
     try {
       const { ModelManager } = await import('./src/ai/index');
+      const { AgentService } = await import('./src/services/agent.service');
       const ai = new ModelManager(hfApiKey);
       
-      // We'll simulate the agentic loop here for the web interface
-      let currentPrompt = message;
-      let finalResponse = "";
-      let loopCount = 0;
-      const MAX_LOOPS = 5;
+      const result = await AgentService.processWebMessage(ai, message, history || [], userName || 'User');
       
-      const actions = [];
-
-      while (loopCount < MAX_LOOPS) {
-        let aiResponse = await ai.generateText(currentPrompt, history || [], userName || 'User');
-        
-        // Process [REACT: emoji]
-        const reactRegex = /\[REACT:\s*(.+?)\]/g;
-        let reactMatch;
-        while ((reactMatch = reactRegex.exec(aiResponse)) !== null) {
-          actions.push({ type: 'reaction', emoji: reactMatch[1].trim() });
-          aiResponse = aiResponse.replace(reactMatch[0], '').trim();
-        }
-
-        // Process [MESSAGE: text]
-        const messageRegex = /\[MESSAGE:\s*(.+?)\]/g;
-        let msgMatch;
-        while ((msgMatch = messageRegex.exec(aiResponse)) !== null) {
-          actions.push({ type: 'message', text: msgMatch[1].trim() });
-          aiResponse = aiResponse.replace(msgMatch[0], '').trim();
-        }
-
-        // Process [IMAGE: prompt]
-        const imageMatch = aiResponse.match(/\[IMAGE:\s*(.+?)\]/);
-        if (imageMatch) {
-          const imgPrompt = imageMatch[1].trim();
-          actions.push({ type: 'message', text: `🎨 Generating image: ${imgPrompt}...` });
-          try {
-            const imageBlob = await ai.generateImage(imgPrompt);
-            const arrayBuffer = await imageBlob.arrayBuffer();
-            const base64 = Buffer.from(arrayBuffer).toString('base64');
-            actions.push({ type: 'image', url: `data:image/jpeg;base64,${base64}`, prompt: imgPrompt });
-            
-            currentPrompt = `[System: Image generated successfully for "${imgPrompt}". Continue your response.]`;
-            loopCount++;
-            continue;
-          } catch (e) {
-            currentPrompt = `[System: Failed to generate image. Inform the user and continue.]`;
-            loopCount++;
-            continue;
-          }
-        }
-
-        // Process [SEARCH: query]
-        const searchMatch = aiResponse.match(/\[SEARCH:\s*(.+?)\]/);
-        if (searchMatch) {
-          const query = searchMatch[1].trim();
-          actions.push({ type: 'message', text: `🔍 Searching the web for "${query}"...` });
-          
-          try {
-            const fetchRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
-              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-            });
-            const html = await fetchRes.text();
-            
-            const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/g;
-            let snippets = [];
-            let sMatch;
-            while ((sMatch = snippetRegex.exec(html)) !== null && snippets.length < 3) {
-              snippets.push(sMatch[1].replace(/<[^>]+>/g, '').trim());
-            }
-            
-            const summary = snippets.length > 0 ? snippets.join('\n\n') : "No relevant search results found.";
-            currentPrompt = `[System: Web Search Results for "${query}"]\n${summary}\n\n[System: Continue your response based on these results.]`;
-            loopCount++;
-            continue;
-          } catch (e) {
-            currentPrompt = `[System: Search failed. Inform the user and continue.]`;
-            loopCount++;
-            continue;
-          }
-        }
-
-        // If no special tags, we are done
-        finalResponse = aiResponse;
-        break;
-      }
-      
-      res.json({ response: finalResponse, actions });
+      res.json(result);
     } catch (error: any) {
       console.error('Chat API Error:', error);
       res.status(500).json({ error: error.message || 'Failed to generate response' });
@@ -149,7 +80,7 @@ async function startServer() {
       console.error('Failed to start Telegram bot:', error);
     }
   } else {
-    console.warn('TELEGRAM_BOT_TOKEN is not set. Bot will not start.');
+    console.warn('Skipping Telegram bot startup because TELEGRAM_BOT_TOKEN is missing.');
   }
 
   // Vite middleware for development
