@@ -1,7 +1,7 @@
 import { ModelManager } from '../ai/index';
 import { getChatHistory, addMessage } from '../db/index';
 import TelegramBot from 'node-telegram-bot-api';
-import { sendSafeMarkdown } from '../bot/utils/telegram';
+import { sendSafeHtml } from '../bot/utils/telegram';
 
 export interface AgentAction {
   type: 'reaction' | 'message' | 'image' | 'search';
@@ -29,7 +29,7 @@ export class AgentService {
     const actions: AgentAction[] = [];
 
     while (loopCount < MAX_LOOPS) {
-      let aiResponse = await ai.generateText(currentPrompt, history, userName);
+      let aiResponse = await ai.generateText(currentPrompt, history, userName, 'web');
       
       // Process [REACT: emoji]
       const reactRegex = /\[REACT:\s*(.+?)\]/g;
@@ -120,7 +120,7 @@ export class AgentService {
     const MAX_LOOPS = 5;
 
     while (loopCount < MAX_LOOPS) {
-      let aiResponse = await ai.generateText(currentPrompt, history, userName);
+      let aiResponse = await ai.generateText(currentPrompt, history, userName, 'telegram');
       
       // Process [REACT: emoji]
       const reactRegex = /\[REACT:\s*(.+?)\]/g;
@@ -146,7 +146,7 @@ export class AgentService {
       let msgMatch;
       while ((msgMatch = messageRegex.exec(aiResponse)) !== null) {
         const msgText = msgMatch[1].trim();
-        await sendSafeMarkdown(bot, chatId, msgText);
+        await sendSafeHtml(bot, chatId, msgText);
         aiResponse = aiResponse.replace(msgMatch[0], '').trim();
       }
 

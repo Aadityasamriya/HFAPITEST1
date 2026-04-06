@@ -43,3 +43,9 @@
 .prose p:last-child {
   margin-bottom: 0;
 }
+
+.prose u {
+  text-decoration: underline;
+  text-decoration-color: #a855f7; /* purple-500 */
+  text-underline-offset: 2px;
+}

@@ -10,6 +10,10 @@ const waitingForBroadcast = new Set<number>();
 export async function startBot(token: string) {
   const bot = new TelegramBot(token, { polling: true });
 
+  bot.on('error', (error: any) => {
+    console.error(`[Telegram Bot Error]:`, error);
+  });
+
   bot.on('polling_error', (error: any) => {
     console.error(`[Telegram Polling Error]: ${error.code} - ${error.message}`);
     if (error.code === 'ETELEGRAM' && error.message.includes('401 Unauthorized')) {

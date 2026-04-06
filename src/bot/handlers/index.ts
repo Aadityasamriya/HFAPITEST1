@@ -2,12 +2,11 @@ import TelegramBot from 'node-telegram-bot-api';
 import { getUser, updateUserApiKey, addMessage, getAllUsers } from '../../db/index';
 import { ModelManager } from '../../ai/index';
 import { AgentService } from '../../services/agent.service';
-import { sendSafeMarkdown, withContinuousAction, processAndSendAiResponse } from '../utils/telegram';
+import { sendSafeHtml, withContinuousAction, processAndSendAiResponse } from '../utils/telegram';
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
-// @ts-ignore
-import pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 
 export async function handleTextMessage(
   bot: TelegramBot, 
@@ -33,12 +32,12 @@ export async function handleTextMessage(
       const isValid = await tempAi.validateApiKey();
       if (isValid) {
         await updateUserApiKey(userId, key);
-        await sendSafeMarkdown(bot, chatId, `✅ *API Key saved successfully!* You are now ready to use the bot. Try asking me to generate an image or write some code!`);
+        await sendSafeHtml(bot, chatId, `✅ <b>API Key saved successfully!</b> You are now ready to use the bot. Try asking me to generate an image or write some code!`);
       } else {
-        await sendSafeMarkdown(bot, chatId, `❌ *Invalid API Key.* Please check your key and try /settings again.`);
+        await sendSafeHtml(bot, chatId, `❌ <b>Invalid API Key.</b> Please check your key and try /settings again.`);
       }
     } else {
-      await sendSafeMarkdown(bot, chatId, `❌ *Invalid format.* Hugging Face keys usually start with 'hf_'. Try /settings again.`);
+      await sendSafeHtml(bot, chatId, `❌ <b>Invalid format.</b> Hugging Face keys usually start with 'hf_'. Try /settings again.`);
     }
     return;
   }
@@ -53,7 +52,7 @@ export async function handleTextMessage(
     
     for (const u of users) {
       try {
-        await sendSafeMarkdown(bot, u.id, `📢 *Announcement*\n\n${text}`);
+        await sendSafeHtml(bot, u.id, `📢 <b>Announcement</b>\n\n${text}`);
         successCount++;
       } catch (e) {
         // User might have blocked the bot
@@ -66,7 +65,7 @@ export async function handleTextMessage(
 
   // Normal Chat Flow
   if (!user.hfApiKey) {
-    await sendSafeMarkdown(bot, chatId, `⚠️ *API Key Required*\nPlease set your Hugging Face API key using /settings before chatting.`);
+    await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your Hugging Face API key using /settings before chatting.`);
     return;
   }
 
@@ -79,7 +78,7 @@ export async function handleTextMessage(
     await addMessage(userId, 'assistant', finalResponse);
   } catch (error: any) {
     console.error('Agentic Loop Error:', error);
-    await sendSafeMarkdown(bot, chatId, `❌ *An error occurred while processing your request.* Please try again later.`);
+    await sendSafeHtml(bot, chatId, `❌ <b>An error occurred while processing your request.</b> Please try again later.`);
   }
 }
 
@@ -89,7 +88,7 @@ export async function handleVoiceMessage(bot: TelegramBot, msg: TelegramBot.Mess
   const user = await getUser(userId, msg.from!.first_name, msg.from!.username);
 
   if (!user.hfApiKey) {
-    await sendSafeMarkdown(bot, chatId, `⚠️ *API Key Required*\nPlease set your Hugging Face API key using /settings before sending voice messages.`);
+    await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your Hugging Face API key using /settings before sending voice messages.`);
     return;
   }
 
@@ -104,7 +103,7 @@ export async function handleVoiceMessage(bot: TelegramBot, msg: TelegramBot.Mess
       return await ai.transcribeAudio(blob);
     });
 
-    await sendSafeMarkdown(bot, chatId, `🎙️ *Transcription:*\n_${transcription}_\n\n🤖 *Thinking...*`);
+    await sendSafeHtml(bot, chatId, `🎙️ <b>Transcription:</b>\n<i>${transcription}</i>\n\n🤖 <b>Thinking...</b>`);
     
     await addMessage(userId, 'user', `[Voice Message Transcription]: ${transcription}`);
     const finalResponse = await AgentService.processTelegramMessage(ai, transcription, user, user.name, bot, chatId, msg.message_id);
@@ -113,7 +112,7 @@ export async function handleVoiceMessage(bot: TelegramBot, msg: TelegramBot.Mess
 
   } catch (error) {
     console.error('Voice processing error:', error);
-    await sendSafeMarkdown(bot, chatId, `❌ *Failed to process voice message.*`);
+    await sendSafeHtml(bot, chatId, `❌ <b>Failed to process voice message.</b>`);
   }
 }
 
@@ -123,7 +122,7 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
   const user = await getUser(userId, msg.from!.first_name, msg.from!.username);
 
   if (!user.hfApiKey) {
-    await sendSafeMarkdown(bot, chatId, `⚠️ *API Key Required*\nPlease set your Hugging Face API key using /settings before sending documents.`);
+    await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your Hugging Face API key using /settings before sending documents.`);
     return;
   }
 
@@ -132,7 +131,7 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
   const fileSize = doc.file_size || 0;
 
   if (fileSize > 10 * 1024 * 1024) {
-    await sendSafeMarkdown(bot, chatId, `❌ *File too large.* Please send files smaller than 10MB.`);
+    await sendSafeHtml(bot, chatId, `❌ <b>File too large.</b> Please send files smaller than 10MB.`);
     return;
   }
 
@@ -146,7 +145,8 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
       let extractedText = '';
 
       if (doc.mime_type === 'application/pdf' || doc.file_name?.endsWith('.pdf')) {
-        const pdfData = await pdfParse(buffer);
+        const parser = new PDFParse({ data: buffer });
+        const pdfData = await parser.getText();
         extractedText = pdfData.text;
       } else if (doc.mime_type === 'application/zip' || doc.mime_type === 'application/x-zip-compressed' || doc.file_name?.endsWith('.zip')) {
         const zip = new AdmZip(buffer);
@@ -164,12 +164,12 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
       } else if (doc.mime_type?.startsWith('text/') || doc.file_name?.match(/\.(txt|json|csv|md|py|js|ts|html|css)$/i)) {
         extractedText = buffer.toString('utf8');
       } else {
-        await sendSafeMarkdown(bot, chatId, `❌ *Unsupported file type.* I can read PDFs, ZIPs (containing text), and plain text files.`);
+        await sendSafeHtml(bot, chatId, `❌ <b>Unsupported file type.</b> I can read PDFs, ZIPs (containing text), and plain text files.`);
         return;
       }
 
       if (!extractedText.trim()) {
-        await sendSafeMarkdown(bot, chatId, `⚠️ *Could not extract any text from the file.*`);
+        await sendSafeHtml(bot, chatId, `⚠️ <b>Could not extract any text from the file.</b>`);
         return;
       }
 
@@ -183,6 +183,6 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
     });
   } catch (error) {
     console.error('Document processing error:', error);
-    await sendSafeMarkdown(bot, chatId, `❌ *Failed to process document.*`);
+    await sendSafeHtml(bot, chatId, `❌ <b>Failed to process document.</b>`);
   }
 }

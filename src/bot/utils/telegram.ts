@@ -1,12 +1,12 @@
 import TelegramBot from 'node-telegram-bot-api';
 
-// Helper to safely send Markdown messages (fallback to plain text if Markdown fails)
-export async function sendSafeMarkdown(bot: TelegramBot, chatId: number | string, text: string, options?: TelegramBot.SendMessageOptions) {
+// Helper to safely send HTML messages (fallback to plain text if HTML fails)
+export async function sendSafeHtml(bot: TelegramBot, chatId: number | string, text: string, options?: TelegramBot.SendMessageOptions) {
   try {
-    await bot.sendMessage(chatId, text, { parse_mode: 'Markdown', ...options });
+    await bot.sendMessage(chatId, text, { parse_mode: 'HTML', ...options });
   } catch (e: any) {
     if (e.message && e.message.includes('parse entities')) {
-      // Fallback to plain text if Markdown is malformed
+      // Fallback to plain text if HTML is malformed
       await bot.sendMessage(chatId, text, options);
     } else {
       throw e;
@@ -63,7 +63,7 @@ export async function processAndSendAiResponse(bot: TelegramBot, chatId: number 
     if (inlineKeyboard.length > 0) {
       opts.reply_markup = { inline_keyboard: inlineKeyboard };
     }
-    await sendSafeMarkdown(bot, chatId, cleanResponse || 'Here you go!', opts);
+    await sendSafeHtml(bot, chatId, cleanResponse || 'Here you go!', opts);
   }
 
   // Send any polls

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Settings, Send, Bot, User, Image as ImageIcon, Search, Key, Plus, Menu, X, Sparkles, Loader2, MessageSquare, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { motion, AnimatePresence } from 'framer-motion';
+import rehypeRaw from 'rehype-raw';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 
 interface Message {
@@ -319,7 +320,7 @@ export default function App() {
                       )}
                       
                       <div className="prose prose-invert prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10 prose-pre:rounded-2xl max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{msg.content}</ReactMarkdown>
                       </div>
 
                       {msg.images && msg.images.length > 0 && (

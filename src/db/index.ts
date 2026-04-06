@@ -86,7 +86,7 @@ export async function clearChatHistory(userId: string | number) {
 export async function resetDatabase(userId: string | number) {
   const db = await getDb();
   await db.collection('messages').deleteMany({ user_id: userId.toString() });
-  await db.collection('users').deleteOne({ _id: new ObjectId(userId.toString()) });
+  await db.collection('users').deleteOne({ telegram_id: userId.toString() });
 }
 
 export async function getStats() {
