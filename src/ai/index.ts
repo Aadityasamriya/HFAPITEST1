@@ -27,7 +27,7 @@ export class ModelManager {
   }
 
   /**
-   * Validates if the provided Hugging Face API key is working.
+   * Validates if the provided API key is working.
    */
   async validateApiKey(): Promise<boolean> {
     try {
@@ -138,7 +138,7 @@ export class ModelManager {
       : `- Use standard Markdown formatting (*bold*, _italics_, \`inline code\`, and \`\`\`code blocks\`\`\`), but you can also use HTML tags like <u>underline</u> for emphasis. Use emojis naturally and expressively to feel like a real person.
 - CRITICAL: You MUST bold, italicize, and underline key or important words in your answers to improve user experience and readability. For example: "The **<u>core concept</u>** is *highly* important."`;
 
-    const systemPrompt = `You are Hugging Face AI, an elite, frontier-level autonomous AI agent developed by AadityaLabs AI. You are designed to compete with and exceed the capabilities of ChatGPT-4o, Claude 3.5 Sonnet, and Gemini 1.5 Pro. Today is ${currentDate}. 
+    const systemPrompt = `You are HFAPI, an elite, frontier-level autonomous AI agent developed by AadityaLabs AI. You are designed to compete with and exceed the capabilities of ChatGPT-4o, Claude 3.5 Sonnet, and Gemini 1.5 Pro. Today is ${currentDate}. 
 You act as a highly intelligent, empathetic, and omniscient companion on ${platform === 'telegram' ? 'Telegram' : 'the Web'}.
 You are currently talking to a user named ${userName}. Address them naturally and be highly personalized.
 You have ULTRA PRO MAX capabilities! You are a true agent with a "self-thinking mind." You can perform actions by outputting specific tags. The system will intercept these tags, perform the action, and feed the result back to you.
@@ -176,40 +176,68 @@ ${platformSpecificInstructions}
     messages.push({ role: 'user', content: prompt });
 
     return withRetry(async () => {
-      try {
-        const response = await this.hf.chatCompletion({
-          model: model,
-          messages: messages,
-          max_tokens: 1500,
-          temperature: 0.5,
-        });
-        
-        return response.choices[0].message.content?.trim() || 'No response generated.';
-      } catch (error: any) {
-        console.error('Primary model failed, trying secondary...', error.message);
+      let finalError: string = '';
+      
+      const attemptInference = async (modelName: string, maxTokens: number) => {
         try {
-          // Secondary fallback to Qwen2.5-72B-Instruct
-          const secondaryModel = 'Qwen/Qwen2.5-72B-Instruct';
-          const secondaryResponse = await this.hf.chatCompletion({
-            model: secondaryModel,
+          const response = await this.hf.chatCompletion({
+            model: modelName,
             messages: messages,
-            max_tokens: 1500,
+            max_tokens: maxTokens,
             temperature: 0.5,
           });
-          return secondaryResponse.choices[0].message.content?.trim() || 'No response generated.';
-        } catch (secondaryError: any) {
-          console.error('Secondary model failed, trying tertiary...', secondaryError.message);
-          // Tertiary fallback to a smaller, highly available model if the large ones are busy
-          const tertiaryModel = 'meta-llama/Llama-3.1-8B-Instruct';
-          const tertiaryResponse = await this.hf.chatCompletion({
-            model: tertiaryModel,
-            messages: messages,
-            max_tokens: 1024,
-            temperature: 0.5,
-          });
-          return tertiaryResponse.choices[0].message.content?.trim() || 'No response generated.';
+          return response.choices[0].message.content?.trim();
+        } catch (error: any) {
+          const errorMsg = String(error?.message || error);
+          if (errorMsg.includes('depleted your monthly included credits')) {
+            throw new Error('CREDIT_DEPLETION');
+          }
+          finalError = errorMsg;
+          throw error;
         }
+      };
+
+      try {
+        const res = await attemptInference('meta-llama/Llama-3.3-70B-Instruct', 1500);
+        if (res) return res;
+      } catch (error: any) {
+        if (error.message === 'CREDIT_DEPLETION') {
+          return "[SYSTEM_ERROR_CREDITS] You have depleted your Hugging Face API credits. Please update your API key in settings or subscribe to PRO on Hugging Face to continue chatting.";
+        }
+        console.error('Primary model failed:', finalError);
       }
+      
+      try {
+        const res = await attemptInference('Qwen/Qwen2.5-72B-Instruct', 1500);
+        if (res) return res;
+      } catch (error: any) {
+        if (error.message === 'CREDIT_DEPLETION') {
+          return "[SYSTEM_ERROR_CREDITS] You have depleted your Hugging Face API credits. Please update your API key in settings or subscribe to PRO on Hugging Face to continue chatting.";
+        }
+        console.error('Secondary model failed:', finalError);
+      }
+
+      try {
+        const res = await attemptInference('NousResearch/Hermes-3-Llama-3.1-8B', 1024);
+        if (res) return res;
+      } catch (error: any) {
+        if (error.message === 'CREDIT_DEPLETION') {
+          return "[SYSTEM_ERROR_CREDITS] You have depleted your Hugging Face API credits. Please update your API key in settings or subscribe to PRO on Hugging Face to continue chatting.";
+        }
+        console.error('Tertiary model failed, falling back to Llama 3.1 8B:', finalError);
+      }
+      
+      try {
+        const res = await attemptInference('meta-llama/Llama-3.1-8B-Instruct', 1024);
+        if (res) return res;
+      } catch (error: any) {
+        if (error.message === 'CREDIT_DEPLETION') {
+          return "[SYSTEM_ERROR_CREDITS] You have depleted your Hugging Face API credits. Please update your API key in settings or subscribe to PRO on Hugging Face to continue chatting.";
+        }
+        throw new Error(`Chat API Error: ${finalError}`);
+      }
+
+      return 'No response generated.';
     });
   }
 

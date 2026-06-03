@@ -37,7 +37,7 @@ export async function handleTextMessage(
         await sendSafeHtml(bot, chatId, `❌ <b>Invalid API Key.</b> Please check your key and try /settings again.`);
       }
     } else {
-      await sendSafeHtml(bot, chatId, `❌ <b>Invalid format.</b> Hugging Face keys usually start with 'hf_'. Try /settings again.`);
+      await sendSafeHtml(bot, chatId, `❌ <b>Invalid format.</b> API keys usually start with 'hf_'. Try /settings again.`);
     }
     return;
   }
@@ -65,17 +65,34 @@ export async function handleTextMessage(
 
   // Normal Chat Flow
   if (!user.hfApiKey) {
-    await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your Hugging Face API key using /settings before chatting.`);
+    await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your API key using /settings before chatting.`);
     return;
   }
 
   const ai = new ModelManager(user.hfApiKey);
-  await addMessage(userId, 'user', text);
+  const topicId = user.activeTopicId || `topic_${Date.now()}`;
+  
+  // Check if this is the first message in the topic
+  const { getChatHistory, saveTopic } = await import('../../db/index');
+  const history = await getChatHistory(userId, 1, topicId);
+  const isFirstMessage = history.length === 0;
+
+  await addMessage(userId, 'user', text, topicId);
 
   try {
     const finalResponse = await AgentService.processTelegramMessage(ai, text, user, user.name, bot, chatId, msg.message_id);
     await processAndSendAiResponse(bot, chatId, finalResponse);
-    await addMessage(userId, 'assistant', finalResponse);
+    await addMessage(userId, 'assistant', finalResponse, topicId);
+    
+    if (isFirstMessage) {
+      try {
+        const titlePrompt = `Generate a very short (2-4 words) title for this conversation based on this message: "${text}". Just return the title, nothing else.`;
+        const titleResponse = await ai.generateText(titlePrompt, [], 'System', 'telegram');
+        await saveTopic(userId, topicId, titleResponse.trim().replace(/["']/g, ''));
+      } catch (e) {
+        await saveTopic(userId, topicId, text.substring(0, 30) + '...');
+      }
+    }
   } catch (error: any) {
     console.error('Agentic Loop Error:', error);
     await sendSafeHtml(bot, chatId, `❌ <b>An error occurred while processing your request.</b> Please try again later.`);
@@ -88,7 +105,7 @@ export async function handleVoiceMessage(bot: TelegramBot, msg: TelegramBot.Mess
   const user = await getUser(userId, msg.from!.first_name, msg.from!.username);
 
   if (!user.hfApiKey) {
-    await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your Hugging Face API key using /settings before sending voice messages.`);
+    await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your API key using /settings before sending voice messages.`);
     return;
   }
 
@@ -122,7 +139,7 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
   const user = await getUser(userId, msg.from!.first_name, msg.from!.username);
 
   if (!user.hfApiKey) {
-    await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your Hugging Face API key using /settings before sending documents.`);
+    await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your API key using /settings before sending documents.`);
     return;
   }
 

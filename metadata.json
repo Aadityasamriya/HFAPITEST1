@@ -1,5 +1,5 @@
 {
-  "name": "HFAPITEST1",
+  "name": "HFAPITEST",
   "description": "A powerful Telegram bot powered by Hugging Face models with a developer dashboard.",
   "requestFramePermissions": []
 }

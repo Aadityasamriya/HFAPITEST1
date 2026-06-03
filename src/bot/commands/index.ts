@@ -1,5 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getUser, updateUserApiKey, clearChatHistory, resetDatabase, getStats, getAllUsers } from '../../db/index';
+import { getUser, updateUserApiKey, clearChatHistory, resetDatabase, getStats, getAllUsers, getTopics, setActiveTopic } from '../../db/index';
 import { ModelManager } from '../../ai/index';
 import { sendSafeHtml } from '../utils/telegram';
 
@@ -8,20 +8,21 @@ export async function handleStartCommand(bot: TelegramBot, msg: TelegramBot.Mess
   const user = await getUser(msg.from!.id, msg.from!.first_name, msg.from!.username);
   
   const welcomeMessage = `
-🌟 <b>Welcome to Hugging Face AI, ${user.name}!</b> 🌟
+🌟 <b>Welcome to HFAPI, ${user.name}!</b> 🌟
 
-I am an Ultra Pro Max AI Agent powered by Hugging Face. I can:
-💬 Chat with you using advanced LLMs
+I am a highly advanced AI Assistant. I can:
+💬 Chat with you using state-of-the-art intelligence
 🎨 Generate breathtaking images
 🎙️ Transcribe voice messages
 🔍 Search the web for real-time info
 📄 Read PDFs and ZIP files
 
-<b>To get started, you need to connect your Hugging Face API Key.</b>
-Get it for free here: <a href="https://huggingface.co/settings/tokens">Hugging Face Tokens</a>
+<b>To get started, you need to connect your API Key.</b>
+Get it for free here: <a href="https://huggingface.co/settings/tokens">API Tokens</a>
 
 Use /settings to configure your API key.
-Use /newchat to clear our conversation history.
+Use /history to view your past conversations.
+Use /newchat to start a new conversation topic.
   `;
   
   await sendSafeHtml(bot, chatId, welcomeMessage, { disable_web_page_preview: true });
@@ -33,9 +34,9 @@ export async function handleSettingsCommand(bot: TelegramBot, msg: TelegramBot.M
   
   let statusMsg = `⚙️ <b>Settings</b>\n\n`;
   if (user.hfApiKey) {
-    statusMsg += `✅ <b>Hugging Face API Key:</b> Connected (ends in ...${user.hfApiKey.slice(-4)})\n`;
+    statusMsg += `✅ <b>API Key:</b> Connected (ends in ...${user.hfApiKey.slice(-4)})\n`;
   } else {
-    statusMsg += `❌ <b>Hugging Face API Key:</b> Not connected\n`;
+    statusMsg += `❌ <b>API Key:</b> Not connected\n`;
   }
   
   statusMsg += `\nTo update your API key, reply to this message with your new key.`;
@@ -46,8 +47,27 @@ export async function handleSettingsCommand(bot: TelegramBot, msg: TelegramBot.M
 
 export async function handleNewChatCommand(bot: TelegramBot, msg: TelegramBot.Message) {
   const chatId = msg.chat.id;
-  await clearChatHistory(msg.from!.id);
-  await sendSafeHtml(bot, chatId, `🧹 <b>Chat history cleared!</b> Let's start fresh. What's on your mind?`);
+  await setActiveTopic(msg.from!.id, `topic_${Date.now()}`);
+  await sendSafeHtml(bot, chatId, `✨ <b>New chat started!</b> What's on your mind?`);
+}
+
+export async function handleHistoryCommand(bot: TelegramBot, msg: TelegramBot.Message) {
+  const chatId = msg.chat.id;
+  const topics = await getTopics(msg.from!.id);
+  
+  if (topics.length === 0) {
+    await sendSafeHtml(bot, chatId, `📜 <b>History</b>\n\nYou don't have any past conversations yet. Start chatting!`);
+    return;
+  }
+  
+  const inlineKeyboard = topics.slice(0, 10).map(topic => ([{
+    text: `💬 ${topic.title}`,
+    callback_data: `topic_${topic.topic_id}`
+  }]));
+  
+  await sendSafeHtml(bot, chatId, `📜 <b>Your Recent Conversations</b>\n\nClick a button below to resume a topic (Note: Telegram bot currently uses a single continuous context, but you can view these topics on the website!):`, {
+    reply_markup: { inline_keyboard: inlineKeyboard }
+  });
 }
 
 export async function handleResetDbCommand(bot: TelegramBot, msg: TelegramBot.Message) {

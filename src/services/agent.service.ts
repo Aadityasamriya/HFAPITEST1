@@ -29,7 +29,16 @@ export class AgentService {
     const actions: AgentAction[] = [];
 
     while (loopCount < MAX_LOOPS) {
-      let aiResponse = await ai.generateText(currentPrompt, history, userName, 'web');
+      let aiResponse: string;
+      try {
+        aiResponse = await ai.generateText(currentPrompt, history, userName, 'web');
+        
+        if (aiResponse.includes('[SYSTEM_ERROR_CREDITS]')) {
+           return { response: aiResponse.replace('[SYSTEM_ERROR_CREDITS]', '⚠️ **API Limits Exceeded:**\n'), actions };
+        }
+      } catch (e: any) {
+        return { response: `⚠️ **Error:** ${e.message}`, actions };
+      }
       
       // Process [REACT: emoji]
       const reactRegex = /\[REACT:\s*(.+?)\]/g;
@@ -120,7 +129,16 @@ export class AgentService {
     const MAX_LOOPS = 5;
 
     while (loopCount < MAX_LOOPS) {
-      let aiResponse = await ai.generateText(currentPrompt, history, userName, 'telegram');
+      let aiResponse: string;
+      try {
+        aiResponse = await ai.generateText(currentPrompt, history, userName, 'telegram');
+        
+        if (aiResponse.includes('[SYSTEM_ERROR_CREDITS]')) {
+           return aiResponse.replace('[SYSTEM_ERROR_CREDITS]', '⚠️ <b>API Limits Exceeded:</b>\n');
+        }
+      } catch (e: any) {
+        return `⚠️ <b>Error:</b> ${e.message}`;
+      }
       
       // Process [REACT: emoji]
       const reactRegex = /\[REACT:\s*(.+?)\]/g;

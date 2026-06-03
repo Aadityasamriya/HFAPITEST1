@@ -50,8 +50,58 @@ async function startServer() {
     }
   });
 
+  app.post('/api/web/login', async (req, res) => {
+    const { identifier } = req.body;
+    if (!identifier) return res.status(400).json({ error: 'Identifier is required' });
+    
+    try {
+      const { getUserByUsernameOrId } = await import('./src/db/index');
+      const user = await getUserByUsernameOrId(identifier);
+      if (user) {
+        res.json({ success: true, user });
+      } else {
+        res.status(404).json({ success: false, error: 'User not found' });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/web/signup', async (req, res) => {
+    const { identifier, apiKey } = req.body;
+    if (!identifier || !apiKey) return res.status(400).json({ error: 'Identifier and API key are required' });
+    
+    try {
+      const { registerOrUpdateUserWeb } = await import('./src/db/index');
+      const user = await registerOrUpdateUserWeb(identifier, apiKey);
+      res.json({ success: true, user });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/web/topics/:userId', async (req, res) => {
+    try {
+      const { getTopics } = await import('./src/db/index');
+      const topics = await getTopics(req.params.userId);
+      res.json({ success: true, topics });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/web/history/:userId/:topicId', async (req, res) => {
+    try {
+      const { getChatHistory } = await import('./src/db/index');
+      const history = await getChatHistory(req.params.userId, 50, req.params.topicId);
+      res.json({ success: true, history: history.reverse() });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post('/api/chat', async (req, res) => {
-    const { message, history, hfApiKey, userName } = req.body;
+    const { message, history, hfApiKey, userName, userId, topicId } = req.body;
     
     if (!hfApiKey) {
       return res.status(400).json({ error: 'Hugging Face API key is required' });
@@ -60,9 +110,30 @@ async function startServer() {
     try {
       const { ModelManager } = await import('./src/ai/index');
       const { AgentService } = await import('./src/services/agent.service');
+      const { addMessage, saveTopic } = await import('./src/db/index');
+      
       const ai = new ModelManager(hfApiKey);
       
+      if (userId) {
+        await addMessage(userId, 'user', message, topicId);
+      }
+      
       const result = await AgentService.processWebMessage(ai, message, history || [], userName || 'User');
+      
+      if (userId) {
+        await addMessage(userId, 'assistant', result.response, topicId);
+        
+        // Generate topic title if it's the first message
+        if (!history || history.length === 0) {
+          try {
+            const titlePrompt = `Generate a very short (2-4 words) title for this conversation based on this message: "${message}". Just return the title, nothing else.`;
+            const titleResponse = await ai.generateText(titlePrompt, [], 'System', 'web');
+            await saveTopic(userId, topicId, titleResponse.trim().replace(/["']/g, ''));
+          } catch (e) {
+            await saveTopic(userId, topicId, message.substring(0, 30) + '...');
+          }
+        }
+      }
       
       res.json(result);
     } catch (error: any) {
