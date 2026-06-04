@@ -19,13 +19,18 @@ I am a highly advanced AI Assistant. I can:
 
 <b>To get started, you need to connect your API Key.</b>
 Get it for free here: <a href="https://huggingface.co/settings/tokens">API Tokens</a>
-
-Use /settings to configure your API key.
-Use /history to view your past conversations.
-Use /newchat to start a new conversation topic.
   `;
   
-  await sendSafeHtml(bot, chatId, welcomeMessage, { disable_web_page_preview: true });
+  await sendSafeHtml(bot, chatId, welcomeMessage, { 
+    disable_web_page_preview: true,
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '⚙️ Configure API Key', callback_data: 'action_settings' }],
+        [{ text: '➕ New Chat', callback_data: 'action_newchat' }, { text: '📜 History', callback_data: 'action_history' }],
+        [{ text: '💻 Open Web Dashboard', web_app: { url: 'https://ais-pre-kqqznwd43u52hcij2wfzgv-15028068203.asia-east1.run.app' } }]
+      ]
+    }
+  });
 }
 
 export async function handleSettingsCommand(bot: TelegramBot, msg: TelegramBot.Message, waitingForApiKey: Set<number>) {

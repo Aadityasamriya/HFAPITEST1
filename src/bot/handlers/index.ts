@@ -6,8 +6,10 @@ import { sendSafeHtml, withContinuousAction, processAndSendAiResponse } from '..
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
-// @ts-ignore - pdf-parse lacks proper default export types
-import pdfParse from 'pdf-parse';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
 
 export async function handleTextMessage(
   bot: TelegramBot, 

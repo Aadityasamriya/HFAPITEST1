@@ -45,6 +45,27 @@ export async function startBot(token: string) {
   });
 
   bot.on('callback_query', async (query) => {
+    // Inject the actual user info into the message so handlers see the correct user
+    if (query.message) {
+      query.message.from = query.from;
+    }
+    
+    if (query.data === 'action_settings') {
+      await bot.answerCallbackQuery(query.id);
+      await handleSettingsCommand(bot, query.message!, waitingForApiKey);
+      return;
+    }
+    if (query.data === 'action_newchat') {
+      await bot.answerCallbackQuery(query.id);
+      await handleNewChatCommand(bot, query.message!);
+      return;
+    }
+    if (query.data === 'action_history') {
+      await bot.answerCallbackQuery(query.id);
+      await handleHistoryCommand(bot, query.message!);
+      return;
+    }
+
     if (query.data && query.data.startsWith('topic_')) {
       const topicId = query.data.replace('topic_', '');
       await bot.answerCallbackQuery(query.id, { text: 'Loading history...' });
