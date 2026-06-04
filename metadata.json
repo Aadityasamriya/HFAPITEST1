@@ -1,5 +1,8 @@
 {
   "name": "HFAPITEST",
   "description": "A powerful Telegram bot powered by Hugging Face models with a developer dashboard.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

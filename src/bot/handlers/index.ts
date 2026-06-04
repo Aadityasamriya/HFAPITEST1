@@ -6,7 +6,8 @@ import { sendSafeHtml, withContinuousAction, processAndSendAiResponse } from '..
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import { PDFParse } from 'pdf-parse';
+// @ts-ignore - pdf-parse lacks proper default export types
+import pdfParse from 'pdf-parse';
 
 export async function handleTextMessage(
   bot: TelegramBot, 
@@ -95,7 +96,11 @@ export async function handleTextMessage(
     }
   } catch (error: any) {
     console.error('Agentic Loop Error:', error);
-    await sendSafeHtml(bot, chatId, `❌ <b>An error occurred while processing your request.</b> Please try again later.`);
+    try {
+      await sendSafeHtml(bot, chatId, `❌ <b>An error occurred while processing your request.</b> Please try again later.`);
+    } catch (e) {
+      // Ignore if we can't send the error message (e.g. user blocked bot)
+    }
   }
 }
 
@@ -129,7 +134,9 @@ export async function handleVoiceMessage(bot: TelegramBot, msg: TelegramBot.Mess
 
   } catch (error) {
     console.error('Voice processing error:', error);
-    await sendSafeHtml(bot, chatId, `❌ <b>Failed to process voice message.</b>`);
+    try {
+      await sendSafeHtml(bot, chatId, `❌ <b>Failed to process voice message.</b>`);
+    } catch(e) {}
   }
 }
 
@@ -162,8 +169,7 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
       let extractedText = '';
 
       if (doc.mime_type === 'application/pdf' || doc.file_name?.endsWith('.pdf')) {
-        const parser = new PDFParse({ data: buffer });
-        const pdfData = await parser.getText();
+        const pdfData = await pdfParse(buffer);
         extractedText = pdfData.text;
       } else if (doc.mime_type === 'application/zip' || doc.mime_type === 'application/x-zip-compressed' || doc.file_name?.endsWith('.zip')) {
         const zip = new AdmZip(buffer);
@@ -200,6 +206,8 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
     });
   } catch (error) {
     console.error('Document processing error:', error);
-    await sendSafeHtml(bot, chatId, `❌ <b>Failed to process document.</b>`);
+    try {
+      await sendSafeHtml(bot, chatId, `❌ <b>Failed to process document.</b>`);
+    } catch (e) {}
   }
 }

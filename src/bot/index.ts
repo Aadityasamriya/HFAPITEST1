@@ -69,14 +69,22 @@ export async function startBot(token: string) {
     }
   });
 
-  // Set bot commands menu
-  bot.setMyCommands([
-    { command: '/start', description: 'Start the bot' },
-    { command: '/newchat', description: 'Start a new chat (clear history)' },
-    { command: '/history', description: 'View past conversations' },
-    { command: '/settings', description: 'Configure API Key' },
-    { command: '/resetdb', description: 'Reset your database' }
-  ]).catch(console.error);
+  // Profile Setup
+  try {
+    await bot.setMyName({ name: 'HFAPI' });
+    await bot.setMyShortDescription({ short_description: 'Advanced Intelligence. Chat, search the web, generate images, and read files seamlessly.' });
+    await bot.setMyDescription({ description: 'Welcome to HFAPI, your absolute ultimate Artificial Intelligence companion.\n\nCapabilities include:\n- Intelligent Chat and Coding\n- Real-Time Web Search\n- Breathtaking Image Generation\n- PDF Document Analysis\n- Voice Recognition\n\nProvide your API key and unleash frontier AI today!' });
+    
+    await bot.setMyCommands([
+      { command: '/start', description: 'Start the bot' },
+      { command: '/newchat', description: 'Start a new chat' },
+      { command: '/history', description: 'View past conversations' },
+      { command: '/settings', description: 'Configure API Key & Settings' },
+      { command: '/resetdb', description: 'Wipe your entire database profile' }
+    ]);
+  } catch (error) {
+    console.error('Failed to setup bot profile settings:', error);
+  }
 
   console.log('Bot is running with Enterprise Modular Architecture...');
 }
