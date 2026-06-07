@@ -53,6 +53,17 @@ export default function App() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    // Initialize Telegram Web App if available
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      const tgUser = tg.initDataUnsafe?.user;
+      if (tgUser && !user && !localStorage.getItem('hfapi_user')) {
+        setAuthIdentifier(tgUser.username || tgUser.id.toString());
+      }
+    }
+
     // Setup Speech Recognition
     if (typeof window !== 'undefined') {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;

@@ -49,16 +49,56 @@ export class ModelManager {
     }
   }
 
+  private async fetchTopModels(task: 'text-generation' | 'text-to-image'): Promise<string[]> {
+    try {
+      const response = await fetch(`https://huggingface.co/api/models?pipeline_tag=${task}&sort=downloads&direction=-1&limit=15`);
+      if (!response.ok) return [];
+      const models = await response.json();
+      // Filter for instruct models for text generation, or just return top for image
+      const ids = models.map((m: any) => m.id);
+      if (task === 'text-generation') {
+        const instructModels = ids.filter((id: string) => id.toLowerCase().includes('instruct') || id.toLowerCase().includes('chat'));
+        return instructModels.length > 0 ? instructModels : ids;
+      }
+      return ids;
+    } catch {
+      return [];
+    }
+  }
+
   /**
-   * Generates high-quality images using FLUX.1-schnell (very fast and reliable).
+   * Generates high-quality images dynamically fetching the best model.
    */
   async generateImage(prompt: string): Promise<Blob> {
     return withRetry(async () => {
-      const response = await this.hf.textToImage({
-        inputs: prompt,
-        model: 'black-forest-labs/FLUX.1-schnell',
-      });
-      return response as unknown as Blob;
+      let modelsToTry = await this.fetchTopModels('text-to-image');
+      if (modelsToTry.length === 0) {
+        modelsToTry = ['black-forest-labs/FLUX.1-schnell', 'stabilityai/stable-diffusion-xl-base-1.0'];
+      } else {
+        // ensure flux is prioritized if found, else just use the list
+        if (!modelsToTry.includes('black-forest-labs/FLUX.1-schnell')) {
+          modelsToTry.unshift('black-forest-labs/FLUX.1-schnell');
+        }
+      }
+
+      let lastError: any;
+      for (const model of modelsToTry) {
+        try {
+          const response = await this.hf.textToImage({
+            inputs: prompt,
+            model: model,
+          });
+          return response as unknown as Blob;
+        } catch (error: any) {
+          lastError = error;
+          const errorMsg = String(error?.message || error);
+          if (errorMsg.includes('depleted your monthly included credits') || errorMsg.includes('401')) {
+            throw error; // stop trying if auth/credit issue
+          }
+          console.error(`Image model ${model} failed, trying next...`);
+        }
+      }
+      throw lastError || new Error('All image models failed');
     });
   }
 
@@ -197,47 +237,30 @@ ${platformSpecificInstructions}
         }
       };
 
-      try {
-        const res = await attemptInference('meta-llama/Llama-3.3-70B-Instruct', 1500);
-        if (res) return res;
-      } catch (error: any) {
-        if (error.message === 'CREDIT_DEPLETION') {
-          return "[SYSTEM_ERROR_CREDITS] You have depleted your Hugging Face API credits. Please update your API key in settings or subscribe to PRO on Hugging Face to continue chatting.";
-        }
-        console.error('Primary model failed:', finalError);
-      }
+      let topModels = await this.fetchTopModels('text-generation');
+      // add some reliable fallbacks at the top in case the search returns weird models or models that lack conversational formats
+      const reliableModels = [
+        'meta-llama/Llama-3.3-70B-Instruct',
+        'Qwen/Qwen2.5-72B-Instruct',
+        'NousResearch/Hermes-3-Llama-3.1-8B',
+        'meta-llama/Llama-3.1-8B-Instruct'
+      ];
       
-      try {
-        const res = await attemptInference('Qwen/Qwen2.5-72B-Instruct', 1500);
-        if (res) return res;
-      } catch (error: any) {
-        if (error.message === 'CREDIT_DEPLETION') {
-          return "[SYSTEM_ERROR_CREDITS] You have depleted your Hugging Face API credits. Please update your API key in settings or subscribe to PRO on Hugging Face to continue chatting.";
+      const modelsToTry = [...new Set([...reliableModels, ...topModels])];
+
+      for (const model of modelsToTry) {
+        try {
+          const res = await attemptInference(model, 1500);
+          if (res) return res;
+        } catch (error: any) {
+          if (error.message === 'CREDIT_DEPLETION') {
+            return "[SYSTEM_ERROR_CREDITS] You have depleted your Hugging Face API credits. Please update your API key in settings or subscribe to PRO on Hugging Face to continue chatting.";
+          }
+          console.error(`Model ${model} failed:`, finalError);
         }
-        console.error('Secondary model failed:', finalError);
       }
 
-      try {
-        const res = await attemptInference('NousResearch/Hermes-3-Llama-3.1-8B', 1024);
-        if (res) return res;
-      } catch (error: any) {
-        if (error.message === 'CREDIT_DEPLETION') {
-          return "[SYSTEM_ERROR_CREDITS] You have depleted your Hugging Face API credits. Please update your API key in settings or subscribe to PRO on Hugging Face to continue chatting.";
-        }
-        console.error('Tertiary model failed, falling back to Llama 3.1 8B:', finalError);
-      }
-      
-      try {
-        const res = await attemptInference('meta-llama/Llama-3.1-8B-Instruct', 1024);
-        if (res) return res;
-      } catch (error: any) {
-        if (error.message === 'CREDIT_DEPLETION') {
-          return "[SYSTEM_ERROR_CREDITS] You have depleted your Hugging Face API credits. Please update your API key in settings or subscribe to PRO on Hugging Face to continue chatting.";
-        }
-        throw new Error(`Chat API Error: ${finalError}`);
-      }
-
-      return 'No response generated.';
+      throw new Error(`Chat API Error: ${finalError || 'All models failed'}`);
     });
   }
 
