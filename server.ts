@@ -63,7 +63,11 @@ async function startServer() {
         res.status(404).json({ success: false, error: 'User not found' });
       }
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      if (error.name === 'MongoServerSelectionError' || error.message?.includes('MongoNetworkError') || error.message?.includes('getaddrinfo EAI_AGAIN')) {
+         res.status(500).json({ error: 'Database connection failed: Your MONGODB_URI points to a private network (.internal). Please use a public connection string.' });
+      } else {
+         res.status(500).json({ error: error.message });
+      }
     }
   });
 
@@ -76,7 +80,11 @@ async function startServer() {
       const user = await registerOrUpdateUserWeb(identifier, apiKey);
       res.json({ success: true, user });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      if (error.name === 'MongoServerSelectionError' || error.message?.includes('getaddrinfo EAI_AGAIN')) {
+         res.status(500).json({ error: 'Database connection failed: Your MONGODB_URI points to a private network like .internal. Provide a public URL.' });
+      } else {
+         res.status(500).json({ error: error.message });
+      }
     }
   });
 
@@ -138,7 +146,11 @@ async function startServer() {
       res.json(result);
     } catch (error: any) {
       console.error('Chat API Error:', error);
-      res.status(500).json({ error: error.message || 'Failed to generate response' });
+      if (error.name === 'MongoServerSelectionError' || error.message?.includes('getaddrinfo EAI_AGAIN')) {
+         res.status(500).json({ error: 'Database connection failed: Your MONGODB_URI points to a private network like .internal. Provide a public URL before chatting.' });
+      } else {
+         res.status(500).json({ error: error.message || 'Failed to generate response' });
+      }
     }
   });
 

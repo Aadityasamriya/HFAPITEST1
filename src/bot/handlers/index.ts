@@ -24,10 +24,11 @@ export async function handleTextMessage(
   // Ignore commands
   if (text.startsWith('/')) return;
 
-  const user = await getUser(userId, msg.from!.first_name, msg.from!.username);
+  try {
+    const user = await getUser(userId, msg.from!.first_name, msg.from!.username);
 
-  // Handle API Key Input
-  if (waitingForApiKey.has(userId)) {
+    // Handle API Key Input
+    if (waitingForApiKey.has(userId)) {
     waitingForApiKey.delete(userId);
     const key = text.trim();
     if (key.startsWith('hf_')) {
@@ -99,7 +100,11 @@ export async function handleTextMessage(
   } catch (error: any) {
     console.error('Agentic Loop Error:', error);
     try {
-      await sendSafeHtml(bot, chatId, `❌ <b>An error occurred while processing your request.</b> Please try again later.`);
+      if (error.name === 'MongoServerSelectionError' || error.message.includes('MongoNetworkError') || error.message.includes('getaddrinfo EAI_AGAIN')) {
+        await sendSafeHtml(bot, chatId, `❌ <b>Database Connection Failed.</b>\nYour <code>MONGODB_URI</code> seems to be invalid or private (e.g., a `.internal` address). Please use a publicly accessible connection string in your environment variables.`);
+      } else {
+        await sendSafeHtml(bot, chatId, `❌ <b>An error occurred while processing your request.</b> Please try again later.\n<code>${error.message}</code>`);
+      }
     } catch (e) {
       // Ignore if we can't send the error message (e.g. user blocked bot)
     }
@@ -145,14 +150,16 @@ export async function handleVoiceMessage(bot: TelegramBot, msg: TelegramBot.Mess
 export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.Message) {
   const chatId = msg.chat.id;
   const userId = msg.from!.id;
-  const user = await getUser(userId, msg.from!.first_name, msg.from!.username);
+  
+  try {
+    const user = await getUser(userId, msg.from!.first_name, msg.from!.username);
 
-  if (!user.hfApiKey) {
-    await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your API key using /settings before sending documents.`);
-    return;
-  }
+    if (!user.hfApiKey) {
+      await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your API key using /settings before sending documents.`);
+      return;
+    }
 
-  const ai = new ModelManager(user.hfApiKey);
+    const ai = new ModelManager(user.hfApiKey);
   const doc = msg.document!;
   const fileSize = doc.file_size || 0;
 
@@ -206,10 +213,14 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
       await processAndSendAiResponse(bot, chatId, finalResponse);
       await addMessage(userId, 'assistant', finalResponse);
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Document processing error:', error);
     try {
-      await sendSafeHtml(bot, chatId, `❌ <b>Failed to process document.</b>`);
+      if (error.name === 'MongoServerSelectionError' || error.message?.includes('MongoNetworkError') || error.message?.includes('getaddrinfo')) {
+        await sendSafeHtml(bot, chatId, `❌ <b>Database Connection Failed.</b>\nYour <code>MONGODB_URI</code> seems to be invalid or using a private network.`);
+      } else {
+        await sendSafeHtml(bot, chatId, `❌ <b>Failed to process document.</b>\n<code>${error.message || 'Unknown Error'}</code>`);
+      }
     } catch (e) {}
   }
 }
