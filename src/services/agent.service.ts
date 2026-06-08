@@ -21,17 +21,18 @@ export class AgentService {
   /**
    * Shared Agentic Loop for Web API
    */
-  static async processWebMessage(ai: ModelManager, message: string, history: any[], userName: string): Promise<AgentResponse> {
+  static async processWebMessage(ai: ModelManager, message: string, history: any[], userName: string, userId?: string | number, userMemory?: string): Promise<AgentResponse> {
     let currentPrompt = message;
     let finalResponse = "";
     let loopCount = 0;
     const MAX_LOOPS = 5;
     const actions: AgentAction[] = [];
+    let currentMemory = userMemory;
 
     while (loopCount < MAX_LOOPS) {
       let aiResponse: string;
       try {
-        aiResponse = await ai.generateText(currentPrompt, history, userName, 'web');
+        aiResponse = await ai.generateText(currentPrompt, history, userName, 'web', currentMemory);
         
         if (aiResponse.includes('[SYSTEM_ERROR_CREDITS]')) {
            return { response: aiResponse.replace('[SYSTEM_ERROR_CREDITS]', '⚠️ **API Limits Exceeded:**\n'), actions };
@@ -40,6 +41,21 @@ export class AgentService {
         return { response: `⚠️ **Error:** ${e.message}`, actions };
       }
       
+      // Process [MEMORY: facts]
+      const memoryRegex = /\[MEMORY:\s*(.+?)\]/g;
+      let memMatch;
+      while ((memMatch = memoryRegex.exec(aiResponse)) !== null) {
+        const memoryFact = memMatch[1].trim();
+        if (userId) {
+          const { updateUserMemory } = await import('../db/index');
+          let newMemory = currentMemory ? `${currentMemory}\n- ${memoryFact}` : `- ${memoryFact}`;
+          if (newMemory.length > 2000) newMemory = newMemory.substring(newMemory.length - 2000);
+          await updateUserMemory(userId, newMemory);
+          currentMemory = newMemory;
+        }
+        aiResponse = aiResponse.replace(memMatch[0], '').trim();
+      }
+
       // Process [REACT: emoji]
       const reactRegex = /\[REACT:\s*(.+?)\]/g;
       let reactMatch;
@@ -131,7 +147,7 @@ export class AgentService {
     while (loopCount < MAX_LOOPS) {
       let aiResponse: string;
       try {
-        aiResponse = await ai.generateText(currentPrompt, history, userName, 'telegram');
+        aiResponse = await ai.generateText(currentPrompt, history, userName, 'telegram', user.memory);
         
         if (aiResponse.includes('[SYSTEM_ERROR_CREDITS]')) {
            return aiResponse.replace('[SYSTEM_ERROR_CREDITS]', '⚠️ <b>API Limits Exceeded:</b>\n');
@@ -140,6 +156,22 @@ export class AgentService {
         return `⚠️ <b>Error:</b> ${e.message}`;
       }
       
+      // Process [MEMORY: facts]
+      const memoryRegex = /\[MEMORY:\s*(.+?)\]/g;
+      let memMatch;
+      while ((memMatch = memoryRegex.exec(aiResponse)) !== null) {
+        const memoryFact = memMatch[1].trim();
+        const { updateUserMemory } = await import('../db/index');
+        
+        let newMemory = user.memory ? `${user.memory}\n- ${memoryFact}` : `- ${memoryFact}`;
+        // Prevent memory from blowing up to infinite length
+        if (newMemory.length > 2000) newMemory = newMemory.substring(newMemory.length - 2000);
+        
+        await updateUserMemory(user.id, newMemory);
+        user.memory = newMemory; // Update local ref
+        aiResponse = aiResponse.replace(memMatch[0], '').trim();
+      }
+
       // Process [REACT: emoji]
       const reactRegex = /\[REACT:\s*(.+?)\]/g;
       let reactMatch;

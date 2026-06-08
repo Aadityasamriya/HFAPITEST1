@@ -59,7 +59,8 @@ export async function getUser(telegramId: string | number, firstName?: string, u
     id: user._id.toString(),
     hfApiKey: user.hf_api_key,
     name: user.name,
-    activeTopicId: user.active_topic_id
+    activeTopicId: user.active_topic_id,
+    memory: user.memory
   };
 }
 
@@ -80,7 +81,8 @@ export async function getUserByUsernameOrId(identifier: string) {
       ...user, 
       id: user._id.toString(),
       hfApiKey: user.hf_api_key,
-      name: user.name
+      name: user.name,
+      memory: user.memory
     };
   }
   return null;
@@ -129,7 +131,8 @@ export async function registerOrUpdateUserWeb(identifier: string, apiKey: string
       ...newUser, 
       _id: result.insertedId,
       id: result.insertedId.toString(),
-      hfApiKey: newUser.hf_api_key
+      hfApiKey: newUser.hf_api_key,
+      memory: undefined
     };
   }
 }
@@ -229,3 +232,29 @@ export async function getTopics(userId: string | number) {
     .sort({ created_at: -1 })
     .toArray();
 }
+
+export async function savePollMapping(userId: string | number, pollId: string, topicId: string, question: string, options: string[]) {
+  const db = await getDb();
+  await db.collection('polls').insertOne({
+    user_id: userId.toString(),
+    poll_id: pollId,
+    topic_id: topicId,
+    question,
+    options,
+    created_at: new Date()
+  });
+}
+
+export async function getPollMapping(pollId: string) {
+  const db = await getDb();
+  return await db.collection('polls').findOne({ poll_id: pollId });
+}
+
+export async function updateUserMemory(userId: string | number, memoryText: string) {
+  const db = await getDb();
+  await db.collection('users').updateOne(
+    { telegram_id: userId.toString() },
+    { $set: { memory: memoryText } }
+  );
+}
+

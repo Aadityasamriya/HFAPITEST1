@@ -1,6 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { handleStartCommand, handleSettingsCommand, handleNewChatCommand, handleResetDbCommand, handleAdminCommand, handleHistoryCommand } from './commands/index';
-import { handleTextMessage, handleVoiceMessage, handleDocumentMessage } from './handlers/index';
+import { handleTextMessage, handleVoiceMessage, handleDocumentMessage, handlePollAnswer } from './handlers/index';
 
 // State to track if user is currently entering an API key
 const waitingForApiKey = new Set<number>();
@@ -42,6 +42,10 @@ export async function startBot(token: string) {
 
   bot.on('document', async (msg) => {
     await handleDocumentMessage(bot, msg);
+  });
+  
+  bot.on('poll_answer', async (pollAnswer) => {
+    await handlePollAnswer(bot, pollAnswer);
   });
 
   bot.on('callback_query', async (query) => {

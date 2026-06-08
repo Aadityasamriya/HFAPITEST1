@@ -118,15 +118,20 @@ async function startServer() {
     try {
       const { ModelManager } = await import('./src/ai/index');
       const { AgentService } = await import('./src/services/agent.service');
-      const { addMessage, saveTopic } = await import('./src/db/index');
+      const { addMessage, saveTopic, getUserByUsernameOrId } = await import('./src/db/index');
       
       const ai = new ModelManager(hfApiKey);
+      let userMemory: string | undefined;
       
       if (userId) {
         await addMessage(userId, 'user', message, topicId);
+        const user = await getUserByUsernameOrId(userId);
+        if (user && user.memory) {
+          userMemory = user.memory;
+        }
       }
       
-      const result = await AgentService.processWebMessage(ai, message, history || [], userName || 'User');
+      const result = await AgentService.processWebMessage(ai, message, history || [], userName || 'User', userId, userMemory);
       
       if (userId) {
         await addMessage(userId, 'assistant', result.response, topicId);

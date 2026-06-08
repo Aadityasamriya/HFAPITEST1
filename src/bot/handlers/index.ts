@@ -1,5 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getUser, updateUserApiKey, addMessage, getAllUsers } from '../../db/index';
+import { getUser, updateUserApiKey, addMessage, getAllUsers, getPollMapping } from '../../db/index';
 import { ModelManager } from '../../ai/index';
 import { AgentService } from '../../services/agent.service';
 import { sendSafeHtml, withContinuousAction, processAndSendAiResponse } from '../utils/telegram';
@@ -10,6 +10,37 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
+
+export async function handlePollAnswer(bot: TelegramBot, pollAnswer: TelegramBot.PollAnswer) {
+  try {
+    const userId = pollAnswer.user.id;
+    const pollId = pollAnswer.poll_id;
+    const pollMapping = await getPollMapping(pollId);
+    
+    if (!pollMapping) return; // poll wasn't recorded or expired
+    
+    const user = await getUser(userId, pollAnswer.user.first_name, pollAnswer.user.username);
+    if (!user.hfApiKey) return; // no api key
+    
+    const ai = new ModelManager(user.hfApiKey);
+    const selectedOptions = pollAnswer.option_ids.map(id => pollMapping.options[id]).join(', ');
+    
+    const userMessage = `[Poll Answer] For the question "${pollMapping.question}", I selected: ${selectedOptions}. Please acknowledge or continue based on my answer.`;
+    
+    await addMessage(userId, 'user', userMessage, pollMapping.topic_id);
+    
+    // Simulate thinking state with action
+    // Send standard typing text to notify user
+    await sendSafeHtml(bot, userId, `<i>Received your vote: ${selectedOptions}. Thinking...</i>`);
+    
+    const finalResponse = await AgentService.processTelegramMessage(ai, userMessage, user, user.name, bot, userId, 0); // No message ID since it's a poll answer
+    await processAndSendAiResponse(bot, userId, finalResponse, userId, pollMapping.topic_id);
+    await addMessage(userId, 'assistant', finalResponse, pollMapping.topic_id);
+
+  } catch (error) {
+    console.error('Error handling poll answer:', error);
+  }
+}
 
 export async function handleTextMessage(
   bot: TelegramBot, 
@@ -84,7 +115,7 @@ export async function handleTextMessage(
     await addMessage(userId, 'user', text, topicId);
 
     const finalResponse = await AgentService.processTelegramMessage(ai, text, user, user.name, bot, chatId, msg.message_id);
-    await processAndSendAiResponse(bot, chatId, finalResponse);
+    await processAndSendAiResponse(bot, chatId, finalResponse, userId, topicId);
     await addMessage(userId, 'assistant', finalResponse, topicId);
     
     if (isFirstMessage) {

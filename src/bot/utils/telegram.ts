@@ -33,7 +33,7 @@ export async function withContinuousAction<T>(bot: TelegramBot, chatId: number |
 }
 
 // Helper to parse AI response for UI elements (Buttons, Polls) and send them
-export async function processAndSendAiResponse(bot: TelegramBot, chatId: number | string, aiResponse: string) {
+export async function processAndSendAiResponse(bot: TelegramBot, chatId: number | string, aiResponse: string, userId?: string | number, topicId?: string) {
   let cleanResponse = aiResponse;
   const inlineKeyboard: TelegramBot.InlineKeyboardButton[][] = [];
   const polls: { question: string, options: string[] }[] = [];
@@ -68,6 +68,11 @@ export async function processAndSendAiResponse(bot: TelegramBot, chatId: number 
 
   // Send any polls
   for (const poll of polls) {
-    await bot.sendPoll(chatId, poll.question, poll.options, { is_anonymous: false });
+    const sentPollMsg = await bot.sendPoll(chatId, poll.question, poll.options, { is_anonymous: false });
+    if (userId && topicId && sentPollMsg.poll) {
+       const { savePollMapping } = await import('../../db/index');
+       await savePollMapping(userId, sentPollMsg.poll.id, topicId, poll.question, poll.options);
+    }
   }
 }
+
