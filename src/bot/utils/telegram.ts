@@ -1,13 +1,54 @@
 import TelegramBot from 'node-telegram-bot-api';
 
+function formatTelegramHtml(text: string): string {
+  // First, escape &, <, > to prevent native HTML issues (except the ones we parse)
+  let escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Parse code blocks first
+  escaped = escaped.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  // Parse inline code
+  escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Parse bold
+  escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  // Parse italic (ignore _ inside words)
+  escaped = escaped.replace(/(^|\s)_([^_]+)_(\s|$)/g, '$1<i>$2</i>$3');
+  escaped = escaped.replace(/(^|\s)\*([^*]+)\*(\s|$)/g, '$1<i>$2</i>$3');
+  // Parse underline
+  escaped = escaped.replace(/__([^_]+)__/g, '<u>$1</u>');
+  // Parse strikethrough
+  escaped = escaped.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+  // Parse links
+  escaped = escaped.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+  return escaped;
+}
+
 // Helper to safely send HTML messages (fallback to plain text if HTML fails)
 export async function sendSafeHtml(bot: TelegramBot, chatId: number | string, text: string, options?: TelegramBot.SendMessageOptions) {
   try {
-    await bot.sendMessage(chatId, text, { parse_mode: 'HTML', ...options });
+    // Only apply the markdown -> HTML formatter if it doesn't already contain explicit telegram HTML tags we injected ourself.
+    // Actually, our internal generated strings use raw <b> / <i>. It's better to just try raw first,
+    // usually if it comes from AI it needs parsing, but if from our system it's already HTML.
+    // So we apply standard parser if there are no native `<b`, `<i>`, `<a>` in it.
+    let formattedText = text;
+    if (!text.includes('<b>') && !text.includes('<i>') && !text.includes('<code>')) {
+      formattedText = formatTelegramHtml(text);
+    }
+    
+    await bot.sendMessage(chatId, formattedText, { parse_mode: 'HTML', ...options });
   } catch (e: any) {
     if (e.message && e.message.includes('parse entities')) {
-      // Fallback to plain text if HTML is malformed
-      await bot.sendMessage(chatId, text, options);
+      // Fallback to plain text if HTML is malformed, stripping out HTML tags
+      const plainText = text.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+      try {
+        await bot.sendMessage(chatId, plainText, options);
+      } catch (innerE) {
+        // Absolute fallback without any text mangling
+        await bot.sendMessage(chatId, text, options).catch(() => {});
+      }
     } else {
       throw e;
     }

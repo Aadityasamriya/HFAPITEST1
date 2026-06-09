@@ -16,11 +16,15 @@ export async function getDb(): Promise<Db> {
   
   dbInstance = clientInstance.db(); // Uses the default DB in the URI
   
-  // Ensure indexes for performance
-  await dbInstance.collection('users').createIndex({ telegram_id: 1 }, { unique: true });
-  await dbInstance.collection('users').createIndex({ username: 1 });
-  await dbInstance.collection('messages').createIndex({ user_id: 1, created_at: -1 });
-  await dbInstance.collection('topics').createIndex({ user_id: 1, created_at: -1 });
+  try {
+    // Ensure indexes for performance
+    await dbInstance.collection('users').createIndex({ telegram_id: 1 }, { unique: true });
+    await dbInstance.collection('users').createIndex({ username: 1 });
+    await dbInstance.collection('messages').createIndex({ user_id: 1, created_at: -1 });
+    await dbInstance.collection('topics').createIndex({ user_id: 1, created_at: -1 });
+  } catch (e) {
+    console.warn("Failed to create indexes, likely out of disk space:", e);
+  }
 
   return dbInstance;
 }
@@ -137,14 +141,6 @@ export async function registerOrUpdateUserWeb(identifier: string, apiKey: string
   }
 }
 
-export async function setActiveTopic(userId: string | number, topicId: string) {
-  const db = await getDb();
-  await db.collection('users').updateOne(
-    { telegram_id: userId.toString() },
-    { $set: { active_topic_id: topicId } }
-  );
-}
-
 export async function updateUserApiKey(telegramId: string | number, apiKey: string) {
   const db = await getDb();
   const idStr = telegramId.toString();
@@ -163,98 +159,150 @@ export async function updateUserApiKey(telegramId: string | number, apiKey: stri
 }
 
 export async function addMessage(userId: string | number, role: string, content: string, topicId?: string) {
-  const db = await getDb();
-  await db.collection('messages').insertOne({
-    user_id: userId.toString(),
-    role,
-    content,
-    topic_id: topicId || 'default',
-    created_at: new Date()
-  });
-}
-
-export async function getChatHistory(userId: string | number, limit = 10, topicId?: string) {
-  const db = await getDb();
-  const query: any = { user_id: userId.toString() };
-  if (topicId) {
-    query.topic_id = topicId;
+  try {
+    const db = await getDb();
+    const doc = {
+      user_id: userId.toString(),
+      role,
+      content,
+      topic_id: topicId || 'default',
+      created_at: new Date()
+    };
+    await db.collection('messages').insertOne(doc);
+  } catch (error: any) {
+    if (error.message && error.message.includes('disk space')) {
+      console.warn("DB Out of disk space! Attempting to prune old messages...");
+      try {
+        const db = await getDb();
+        const oldMessages = await db.collection('messages').find({}).sort({ created_at: 1 }).limit(1000).toArray();
+        if (oldMessages.length > 0) {
+          const ids = oldMessages.map(m => m._id);
+          await db.collection('messages').deleteMany({ _id: { $in: ids } });
+        }
+      } catch (pruneErr) {
+        console.error("Failed to prune DB", pruneErr);
+      }
+    } else {
+      console.error("Failed to add message:", error.message);
+    }
   }
-  
-  const messages = await db.collection('messages')
-    .find(query)
-    .sort({ created_at: -1 })
-    .limit(limit)
-    .toArray();
-    
-  return messages.map(m => ({ role: m.role, content: m.content }));
-}
-
-export async function clearChatHistory(userId: string | number) {
-  // Instead of deleting, we just don't do anything here, or we could mark the current topic as closed.
-  // The actual "new chat" logic will just generate a new topic ID.
-}
-
-export async function resetDatabase(userId: string | number) {
-  const db = await getDb();
-  await db.collection('messages').deleteMany({ user_id: userId.toString() });
-  await db.collection('topics').deleteMany({ user_id: userId.toString() });
-  await db.collection('users').deleteOne({ telegram_id: userId.toString() });
-}
-
-export async function getStats() {
-  const db = await getDb();
-  const usersCount = await db.collection('users').countDocuments();
-  const messagesCount = await db.collection('messages').countDocuments();
-  return {
-    users: usersCount,
-    messages: messagesCount
-  };
-}
-
-export async function getAllUsers() {
-  const db = await getDb();
-  return await db.collection('users').find({}).toArray();
 }
 
 export async function saveTopic(userId: string | number, topicId: string, title: string) {
-  const db = await getDb();
-  await db.collection('topics').updateOne(
-    { user_id: userId.toString(), topic_id: topicId },
-    { $set: { title, created_at: new Date() } },
-    { upsert: true }
-  );
+  try {
+    const db = await getDb();
+    await db.collection('topics').updateOne(
+      { user_id: userId.toString(), topic_id: topicId },
+      { $set: { title, created_at: new Date() } },
+      { upsert: true }
+    );
+  } catch (error: any) {
+    console.warn('saveTopic ignored db error:', error.message);
+  }
+}
+
+export async function getChatHistory(userId: string | number, limit = 10, topicId?: string) {
+  try {
+    const db = await getDb();
+    const query: any = { user_id: userId.toString() };
+    if (topicId) {
+      query.topic_id = topicId;
+    }
+    
+    const messages = await db.collection('messages')
+      .find(query)
+      .sort({ created_at: -1 })
+      .limit(limit)
+      .toArray();
+      
+    // reverse to get chronological order from sorted history
+    return messages.map(m => ({ role: m.role, content: m.content }));
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function clearChatHistory(userId: string | number) {}
+
+export async function resetDatabase(userId: string | number) {
+  try {
+    const db = await getDb();
+    await db.collection('messages').deleteMany({ user_id: userId.toString() });
+    await db.collection('topics').deleteMany({ user_id: userId.toString() });
+    await db.collection('users').deleteOne({ telegram_id: userId.toString() });
+  } catch(e) {}
+}
+
+export async function getStats() {
+  try {
+    const db = await getDb();
+    const usersCount = await db.collection('users').countDocuments();
+    const messagesCount = await db.collection('messages').countDocuments();
+    return { users: usersCount, messages: messagesCount };
+  } catch(e) { return { users: 0, messages: 0 }; }
+}
+
+export async function getAllUsers() {
+  try {
+    const db = await getDb();
+    return await db.collection('users').find({}).toArray();
+  } catch(e) { return []; }
 }
 
 export async function getTopics(userId: string | number) {
-  const db = await getDb();
-  return await db.collection('topics')
-    .find({ user_id: userId.toString() })
-    .sort({ created_at: -1 })
-    .toArray();
-}
-
-export async function savePollMapping(userId: string | number, pollId: string, topicId: string, question: string, options: string[]) {
-  const db = await getDb();
-  await db.collection('polls').insertOne({
-    user_id: userId.toString(),
-    poll_id: pollId,
-    topic_id: topicId,
-    question,
-    options,
-    created_at: new Date()
-  });
+  try {
+    const db = await getDb();
+    return await db.collection('topics')
+      .find({ user_id: userId.toString() })
+      .sort({ created_at: -1 })
+      .toArray();
+  } catch(e) { return []; }
 }
 
 export async function getPollMapping(pollId: string) {
-  const db = await getDb();
-  return await db.collection('polls').findOne({ poll_id: pollId });
+  try {
+    const db = await getDb();
+    return await db.collection('polls').findOne({ poll_id: pollId });
+  } catch(e) { return null; }
 }
 
 export async function updateUserMemory(userId: string | number, memoryText: string) {
-  const db = await getDb();
-  await db.collection('users').updateOne(
-    { telegram_id: userId.toString() },
-    { $set: { memory: memoryText } }
-  );
+  try {
+    const db = await getDb();
+    await db.collection('users').updateOne(
+      { telegram_id: userId.toString() },
+      { $set: { memory: memoryText } }
+    );
+  } catch (error: any) {
+    console.warn('updateUserMemory ignored db error:', error.message);
+  }
+}
+
+export async function savePollMapping(userId: string | number, pollId: string, topicId: string, question: string, options: string[]) {
+  try {
+    const db = await getDb();
+    await db.collection('polls').insertOne({
+      user_id: userId.toString(),
+      poll_id: pollId,
+      topic_id: topicId,
+      question,
+      options,
+      created_at: new Date()
+    });
+  } catch (error: any) {
+    console.warn('savePollMapping ignored db error:', error.message);
+  }
+}
+
+export async function setActiveTopic(userId: string | number, topicId: string) {
+  try {
+    const db = await getDb();
+    await db.collection('users').updateOne(
+      { telegram_id: userId.toString() },
+      { $set: { active_topic_id: topicId } }
+    );
+  } catch (error: any) {
+    console.warn('setActiveTopic ignored db error:', error.message);
+  }
 }
 

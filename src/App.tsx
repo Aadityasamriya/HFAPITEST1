@@ -52,6 +52,30 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const doAutoLogin = async (identifier: string) => {
+    try {
+      setAuthLoading(true);
+      const res = await fetch('/api/web/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUser(data.user);
+        localStorage.setItem('hfapi_user', JSON.stringify(data.user));
+        loadTopics(data.user.id);
+        startNewChat();
+      } else if (res.status === 404) {
+        setNeedsApiKey(true);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   useEffect(() => {
     // Initialize Telegram Web App if available
     const tg = (window as any).Telegram?.WebApp;
@@ -60,7 +84,9 @@ export default function App() {
       tg.expand();
       const tgUser = tg.initDataUnsafe?.user;
       if (tgUser && !user && !localStorage.getItem('hfapi_user')) {
-        setAuthIdentifier(tgUser.username || tgUser.id.toString());
+        const id = tgUser.username || tgUser.id.toString();
+        setAuthIdentifier(id);
+        doAutoLogin(id);
       }
     }
 

@@ -49,17 +49,22 @@ export class ModelManager {
     }
   }
 
-  private async fetchTopModels(task: 'text-generation' | 'text-to-image'): Promise<string[]> {
+  private async fetchTopModels(task: 'text-generation' | 'text-to-image', search?: string): Promise<string[]> {
     try {
-      const response = await fetch(`https://huggingface.co/api/models?pipeline_tag=${task}&sort=downloads&direction=-1&limit=15`);
+      let url = `https://huggingface.co/api/models?pipeline_tag=${task}&sort=trendingScore&direction=-1&limit=15`;
+      if (search) url += `&search=${search}`;
+      
+      const response = await fetch(url);
       if (!response.ok) return [];
       const models = await response.json();
-      // Filter for instruct models for text generation, or just return top for image
+      
+      // Filter for instruct/chat models for text generation, or return all for image/search
       const ids = models.map((m: any) => m.id);
-      if (task === 'text-generation') {
+      if (task === 'text-generation' && !search) {
         const instructModels = ids.filter((id: string) => id.toLowerCase().includes('instruct') || id.toLowerCase().includes('chat'));
         return instructModels.length > 0 ? instructModels : ids;
       }
+      // if searching, just trust the results since we're looking for something specific
       return ids;
     } catch {
       return [];
@@ -236,9 +241,26 @@ ${platformSpecificInstructions}
         }
       };
 
-      let topModels = await this.fetchTopModels('text-generation');
+      let searchStr = undefined;
+      const lowerPrompt = prompt.toLowerCase();
+      if (lowerPrompt.includes('code') || lowerPrompt.includes('script') || lowerPrompt.includes('bug') || lowerPrompt.includes('fix')) {
+        searchStr = 'coder';
+      } else if (lowerPrompt.includes('research') || lowerPrompt.includes('think') || lowerPrompt.includes('reason') || lowerPrompt.includes('deep')) {
+        searchStr = 'reasoning';
+      }
+
+      let topModels = await this.fetchTopModels('text-generation', searchStr);
+      if (topModels.length === 0) topModels = await this.fetchTopModels('text-generation'); // fallback if search finds 0
+      
       // add some reliable fallbacks at the top in case the search returns weird models or models that lack conversational formats
-      const reliableModels = [
+      const reliableModels = searchStr === 'reasoning' ? [
+        'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
+        'deepseek-ai/DeepSeek-R1-Distill-Llama-70B',
+        'meta-llama/Llama-3.3-70B-Instruct'
+      ] : searchStr === 'coder' ? [
+        'Qwen/Qwen2.5-Coder-32B-Instruct',
+        'meta-llama/Llama-3.3-70B-Instruct'
+      ] : [
         'meta-llama/Llama-3.3-70B-Instruct',
         'Qwen/Qwen2.5-72B-Instruct',
         'NousResearch/Hermes-3-Llama-3.1-8B',
