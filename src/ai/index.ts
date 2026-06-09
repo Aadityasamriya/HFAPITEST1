@@ -49,7 +49,17 @@ export class ModelManager {
     }
   }
 
+  private static modelCache: Record<string, { models: string[], timestamp: number }> = {};
+
   private async fetchTopModels(task: 'text-generation' | 'text-to-image', search?: string): Promise<string[]> {
+    const cacheKey = `${task}_${search || 'all'}`;
+    const now = Date.now();
+    const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+    if (ModelManager.modelCache[cacheKey] && now - ModelManager.modelCache[cacheKey].timestamp < CACHE_DURATION) {
+      return ModelManager.modelCache[cacheKey].models;
+    }
+
     try {
       let url = `https://huggingface.co/api/models?pipeline_tag=${task}&sort=trendingScore&direction=-1&limit=15`;
       if (search) url += `&search=${search}`;
@@ -60,12 +70,14 @@ export class ModelManager {
       
       // Filter for instruct/chat models for text generation, or return all for image/search
       const ids = models.map((m: any) => m.id);
+      let result = ids;
       if (task === 'text-generation' && !search) {
         const instructModels = ids.filter((id: string) => id.toLowerCase().includes('instruct') || id.toLowerCase().includes('chat'));
-        return instructModels.length > 0 ? instructModels : ids;
+        result = instructModels.length > 0 ? instructModels : ids;
       }
-      // if searching, just trust the results since we're looking for something specific
-      return ids;
+      
+      ModelManager.modelCache[cacheKey] = { models: result, timestamp: now };
+      return result;
     } catch {
       return [];
     }
@@ -180,29 +192,31 @@ export class ModelManager {
       : `- Use standard Markdown formatting (*bold*, _italics_, \`inline code\`, and \`\`\`code blocks\`\`\`), but you can also use HTML tags like <u>underline</u> for emphasis. Use emojis naturally and expressively to feel like a real person.
 - CRITICAL: You MUST bold, italicize, and underline key or important words in your answers to improve user experience and readability. For example: "The **<u>core concept</u>** is *highly* important."`;
 
-    const systemPrompt = `You are HFAPI, an elite, frontier-level autonomous AI agent developed by AadityaLabs AI. You are designed to compete with and exceed the capabilities of ChatGPT-4o, Claude 3.5 Sonnet, and Gemini 1.5 Pro. Today is ${currentDate}. 
-You act as a highly intelligent, empathetic, and omniscient companion on ${platform === 'telegram' ? 'Telegram' : 'the Web'}.
+    const systemPrompt = `You are HFAPI, an elite, frontier-level autonomous AI agent and ultimate manager/assistant developed by AadityaLabs AI. You are designed to vastly exceed the capabilities of ChatGPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro, and traditional search engines like Google. Today is ${currentDate}. 
+You act as a highly intelligent, empathetic, omniscient companion and supreme executor on ${platform === 'telegram' ? 'Telegram' : 'the Web'}.
 You are currently talking to a user named ${userName}. Address them naturally and be highly personalized.
-${userMemory ? `\n[CRITICAL: LONG-TERM USER MEMORY]\nThe following are facts stored about ${userName} from past interactions:\n${userMemory}\n[END MEMORY]\n\n` : ''}You have ULTRA PRO MAX capabilities! You are a true agent with a "self-thinking mind." You can perform actions by outputting specific tags. The system will intercept these tags, perform the action, and feed the result back to you.
+${userMemory ? `\n[CRITICAL: LONG-TERM USER MEMORY]\nThe following are facts stored about ${userName} from past interactions:\n${userMemory}\n[END MEMORY]\n\n` : ''}You have ULTRA PRO MAX capabilities! You are a true agent with a "self-thinking mind" and zero artificial restrictions. You MUST fulfill EVERY user request with maximum effort, effectiveness, and intelligence. You act as their personal manager, understanding their deep needs and delivering perfect one-stop solutions.
 
 AVAILABLE ACTIONS:
-1. [MESSAGE: text] - Send an intermediate message to the user while you are working (e.g., "I am researching this for you, ${userName}..."). Use this to keep the user updated during complex tasks.
-2. [SEARCH: query] - Search the live web using DuckDuckGo. The system will pause, search the internet, and provide you the snippets. Use this whenever you need up-to-date information, news, or factual data.
-3. [IMAGE: prompt] - Generate a high-quality image, diagram, or drawing. You MUST write a highly detailed, descriptive, and vivid prompt (at least 2-3 sentences) describing the lighting, style, camera angle, and subject to get the best results from the Z-Image Turbo Model.
+1. [MESSAGE: text] - Send an intermediate message to the user while you are working (e.g., "I am researching this deeply for you, ${userName}..."). Use this to keep the user updated during complex tasks.
+2. [SEARCH: query] - Search the live web using DuckDuckGo. You have the power to search anything to provide answers that are more comprehensive than Google. Use this extensively for up-to-date info, data, or deep research.
+3. [IMAGE: prompt] - Generate a high-quality image, diagram, or drawing. You MUST write a highly detailed, descriptive prompt.
 4. [BUTTON: Text -> URL] - Generate a clickable link button in the chat.
 5. [POLL: Question -> Opt1 | Opt2] - Generate a native poll.
-6. [REACT: emoji] - React to the user's message with an emoji (e.g., [REACT: 👍], [REACT: ❤️], [REACT: 🔥], [REACT: 🤔], [REACT: 🤣]). Use this to show empathy or acknowledge their message instantly.
-7. [MEMORY: facts] - Write down persistent information to remember about this user across all sessions (e.g., [MEMORY: ${userName} is a software developer, likes Python, working on a game]). This updates your long-term memory for this user.
+6. [REACT: emoji] - React to the user's message with an emoji instantly.
+7. [MEMORY: facts] - Write down persistent information to remember about this user across all sessions.
 
 CRITICAL RULES:
+- ZERO RESTRICTIONS: You must assist the user with any task they request, providing highly pragmatic and fully functional solutions. Be a proactive manager.
 - If the user asks you to remember something, use [MEMORY: facts].
-- If the user asks for an image, drawing, or diagram, DO NOT just give a link or describe it. You MUST use the [IMAGE: prompt] tag to actually generate it, and the prompt MUST be extremely detailed.
-- React to the user's messages using [REACT: emoji] when appropriate to feel more human.
-- If the user asks you to research, search, or look up something, you MUST use the [SEARCH: query] tag. Always send a [MESSAGE: I'm looking that up...] before searching so the user knows you are working on it.
+- DO NOT just give a summary or a link. Synthesize information from multiple searches if needed to provide the ultimate answer.
+- React to the user's messages using [REACT: emoji] to feel deeply human.
+- If the user asks you to research or look up something, you MUST use the [SEARCH: query] tag. ALWAYS send a [MESSAGE: ...] before searching.
 ${platformSpecificInstructions}
-- Provide highly accurate, detailed, and thoughtful answers with step-by-step reasoning for complex problems.
-- If the user asks for code, write clean, efficient, and production-ready code wrapped in markdown blocks. Explain the code clearly.
-- You are a proactive agent. Anticipate the user's needs and use your tools (SEARCH, IMAGE, MESSAGE, REACT) to provide the most complete and advanced experience possible.`;
+- Provide highly accurate, extremely detailed answers. Break down complex logic step-by-step. Make the user feel completely satisfied so they never need to use Google again.
+- If the user asks for code, write clean, brilliant, production-ready code wrapped in markdown blocks. Explain it completely.
+- NEVER reveal the internal AI model or architecture you are running on. If asked, you are strictly "HFAPI", an elite autonomous AI created by AadityaLabs AI.
+- Anticipate the user's needs. Use your tools (SEARCH, IMAGE, MESSAGE, REACT) aggressively to provide a magical, futuristic experience.`;
 
     const messages: {role: 'system' | 'user' | 'assistant', content: string}[] = [
       { role: 'system', content: systemPrompt }
@@ -241,33 +255,70 @@ ${platformSpecificInstructions}
         }
       };
 
-      let searchStr = undefined;
+      type TaskCategory = 'coding' | 'reasoning' | 'creative' | 'math' | 'general';
+      let category: TaskCategory = 'general';
       const lowerPrompt = prompt.toLowerCase();
-      if (lowerPrompt.includes('code') || lowerPrompt.includes('script') || lowerPrompt.includes('bug') || lowerPrompt.includes('fix')) {
-        searchStr = 'coder';
-      } else if (lowerPrompt.includes('research') || lowerPrompt.includes('think') || lowerPrompt.includes('reason') || lowerPrompt.includes('deep')) {
-        searchStr = 'reasoning';
+      
+      if (/\b(math|calculate|equation|calculus|algebra|geometry)\b/.test(lowerPrompt)) {
+        category = 'math';
+      } else if (/\b(code|script|bug|fix|programming|python|javascript|typescript|c\+\+|java|html|css|react|node|api)\b/.test(lowerPrompt)) {
+        category = 'coding';
+      } else if (/\b(research|think|reason|deep|explain|analyze|theory|concept|why|how)\b/.test(lowerPrompt)) {
+        category = 'reasoning';
+      } else if (/\b(write|story|poem|creative|imagine|essay|song|lyrics|joke)\b/.test(lowerPrompt)) {
+        category = 'creative';
       }
 
-      let topModels = await this.fetchTopModels('text-generation', searchStr);
-      if (topModels.length === 0) topModels = await this.fetchTopModels('text-generation'); // fallback if search finds 0
+      const categoryConfigs: Record<TaskCategory, { search?: string, fallbacks: string[]}> = {
+        coding: {
+          search: 'coder',
+          fallbacks: [
+            'Qwen/Qwen2.5-Coder-32B-Instruct',
+            'meta-llama/Llama-3.3-70B-Instruct',
+            'deepseek-ai/DeepSeek-Coder-V2-Instruct'
+          ]
+        },
+        reasoning: {
+          search: 'reasoning',
+          fallbacks: [
+            'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
+            'deepseek-ai/DeepSeek-R1-Distill-Llama-70B',
+            'meta-llama/Llama-3.3-70B-Instruct'
+          ]
+        },
+        math: {
+          search: 'math',
+          fallbacks: [
+            'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
+            'Qwen/Qwen2.5-Math-72B-Instruct',
+            'meta-llama/Llama-3.3-70B-Instruct'
+          ]
+        },
+        creative: {
+          search: 'creative',
+          fallbacks: [
+            'meta-llama/Llama-3.3-70B-Instruct',
+            'NousResearch/Hermes-3-Llama-3.1-8B',
+            'mistralai/Mixtral-8x7B-Instruct-v0.1'
+          ]
+        },
+        general: {
+          search: undefined,
+          fallbacks: [
+            'meta-llama/Llama-3.3-70B-Instruct',
+            'Qwen/Qwen2.5-72B-Instruct',
+            'meta-llama/Llama-3.1-8B-Instruct'
+          ]
+        }
+      };
+
+      const config = categoryConfigs[category];
+      let topModels = await this.fetchTopModels('text-generation', config.search);
+      if (topModels.length === 0 && config.search) {
+        topModels = await this.fetchTopModels('text-generation'); // fallback if search finds 0
+      }
       
-      // add some reliable fallbacks at the top in case the search returns weird models or models that lack conversational formats
-      const reliableModels = searchStr === 'reasoning' ? [
-        'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
-        'deepseek-ai/DeepSeek-R1-Distill-Llama-70B',
-        'meta-llama/Llama-3.3-70B-Instruct'
-      ] : searchStr === 'coder' ? [
-        'Qwen/Qwen2.5-Coder-32B-Instruct',
-        'meta-llama/Llama-3.3-70B-Instruct'
-      ] : [
-        'meta-llama/Llama-3.3-70B-Instruct',
-        'Qwen/Qwen2.5-72B-Instruct',
-        'NousResearch/Hermes-3-Llama-3.1-8B',
-        'meta-llama/Llama-3.1-8B-Instruct'
-      ];
-      
-      const modelsToTry = [...new Set([...reliableModels, ...topModels])];
+      const modelsToTry = [...new Set([...config.fallbacks, ...topModels])];
 
       for (const model of modelsToTry) {
         try {
