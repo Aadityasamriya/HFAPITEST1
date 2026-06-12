@@ -50,48 +50,80 @@ async function startServer() {
     }
   });
 
-  app.post('/api/web/login', async (req, res) => {
-    const { identifier } = req.body;
-    if (!identifier) return res.status(400).json({ error: 'Identifier is required' });
-    
+  // --- Telegram Login Widget Auth ---
+  
+  app.get('/api/web/config', (req, res) => {
+    res.json({ 
+      success: true, 
+      botUsername: process.env.TELEGRAM_BOT_USERNAME || '',
+      requiresSetup: !process.env.TELEGRAM_BOT_USERNAME
+    });
+  });
+
+  app.post('/api/web/telegram-auth-widget', async (req, res) => {
     try {
-      const { getUserByUsernameOrId } = await import('./src/db/index');
-      const user = await getUserByUsernameOrId(identifier);
-      if (user) {
-        res.json({ success: true, user });
-      } else {
-        res.status(404).json({ success: false, error: 'User not found' });
+      const data = req.body;
+      const crypto = await import('crypto');
+      const token = process.env.TELEGRAM_BOT_TOKEN;
+      if (!token) return res.status(500).json({ error: 'Bot token not configured' });
+
+      // Telegram verification logic
+      const checkString = Object.keys(data)
+        .filter(key => key !== 'hash')
+        .sort()
+        .map(key => `${key}=${data[key]}`)
+        .join('\n');
+        
+      const secretKey = crypto.createHash('sha256').update(token).digest();
+      const hash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
+      
+      if (hash !== data.hash) {
+        return res.status(403).json({ error: 'Data is NOT from Telegram' });
       }
+      
+      // Check auth date. Expire in 10 minutes to prevent replay attacks
+      if (Date.now() / 1000 - data.auth_date > 600) {
+        return res.status(403).json({ error: 'Auth session expired' });
+      }
+
+      // Validated. Register or update the user
+      const { getUser } = await import('./src/db/index');
+      const name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.username || 'User';
+      const user = await getUser(data.id, name, data.username, data.photo_url);
+      
+      res.json({ success: true, user });
     } catch (error: any) {
-      if (error.name === 'MongoServerSelectionError' || error.message?.includes('MongoNetworkError') || error.message?.includes('getaddrinfo EAI_AGAIN')) {
-         res.status(500).json({ error: 'Database connection failed: Your MONGODB_URI points to a private network (.internal). Please use a public connection string.' });
-      } else {
-         res.status(500).json({ error: error.message });
-      }
+      res.status(500).json({ error: error.message });
     }
   });
 
-  app.post('/api/web/signup', async (req, res) => {
-    const { identifier, apiKey } = req.body;
-    if (!identifier || !apiKey) return res.status(400).json({ error: 'Identifier and API key are required' });
+  // Keep API Key update endpoint
+  app.post('/api/web/update-api-key', async (req, res) => {
+    const { telegramId, apiKey } = req.body;
+    if (!telegramId || !apiKey) return res.status(400).json({ error: 'Telegram ID and API key are required' });
     
     try {
-      const { registerOrUpdateUserWeb } = await import('./src/db/index');
-      const user = await registerOrUpdateUserWeb(identifier, apiKey);
+      const { updateUserApiKey, getUser } = await import('./src/db/index');
+      await updateUserApiKey(telegramId, apiKey);
+      const user = await getUser(telegramId);
       res.json({ success: true, user });
     } catch (error: any) {
-      if (error.name === 'MongoServerSelectionError' || error.message?.includes('getaddrinfo EAI_AGAIN')) {
-         res.status(500).json({ error: 'Database connection failed: Your MONGODB_URI points to a private network like .internal. Provide a public URL.' });
-      } else {
-         res.status(500).json({ error: error.message });
-      }
+      res.status(500).json({ error: error.message });
     }
   });
 
   app.get('/api/web/topics/:userId', async (req, res) => {
     try {
-      const { getTopics } = await import('./src/db/index');
-      const topics = await getTopics(req.params.userId);
+      const { redisCache } = await import('./src/lib/redis');
+      const cacheKey = `topics_${req.params.userId}`;
+      let topics = await redisCache.get<any[]>(cacheKey);
+      
+      if (!topics) {
+        const { getTopics } = await import('./src/db/index');
+        topics = await getTopics(req.params.userId);
+        await redisCache.set(cacheKey, topics, 10); // Cache for 10 seconds
+      }
+      
       res.json({ success: true, topics });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -116,6 +148,14 @@ async function startServer() {
     }
 
     try {
+      const { redisCache } = await import('./src/lib/redis');
+      const rateLimitKey = `rate_limit_web_${userId || req.ip || 'anonymous'}`;
+      const count = await redisCache.incrementRateLimit(rateLimitKey, 30); // 30 seconds window
+      
+      if (count > 10) {
+        return res.status(429).json({ error: 'Too many requests. Please wait 30 seconds before sending another message.' });
+      }
+
       const { ModelManager } = await import('./src/ai/index');
       const { AgentService } = await import('./src/services/agent.service');
       const { addMessage, saveTopic, getUserByUsernameOrId } = await import('./src/db/index');
@@ -145,6 +185,8 @@ async function startServer() {
           } catch (e) {
             await saveTopic(userId, topicId, message.substring(0, 30) + '...');
           }
+          // Invalidate cache since a new topic was created
+          await redisCache.del(`topics_${userId}`);
         }
       }
       

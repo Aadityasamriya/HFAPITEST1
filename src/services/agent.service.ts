@@ -100,19 +100,28 @@ export class AgentService {
         actions.push({ type: 'message', text: `🔍 Searching the web for "${query}"...` });
         
         try {
-          const fetchRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-          });
-          const html = await fetchRes.text();
-          
-          const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/g;
-          let snippets = [];
-          let sMatch;
-          while ((sMatch = snippetRegex.exec(html)) !== null && snippets.length < 3) {
-            snippets.push(sMatch[1].replace(/<[^>]+>/g, '').trim());
+          const { redisCache } = await import('../lib/redis');
+          const cacheKey = `search_ddg_${query.replace(/\s+/g, '_')}`;
+          let summary = await redisCache.get<string>(cacheKey);
+
+          if (!summary) {
+            const fetchRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+            });
+            const html = await fetchRes.text();
+            
+            const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/g;
+            let snippets = [];
+            let sMatch;
+            while ((sMatch = snippetRegex.exec(html)) !== null && snippets.length < 3) {
+              snippets.push(sMatch[1].replace(/<[^>]+>/g, '').trim());
+            }
+            
+            summary = snippets.length > 0 ? snippets.join('\n\n') : "No relevant search results found.";
+            if (snippets.length > 0) {
+              await redisCache.set(cacheKey, summary, 3600); // cache for 1 hour
+            }
           }
-          
-          const summary = snippets.length > 0 ? snippets.join('\n\n') : "No relevant search results found.";
           currentPrompt = `[System: Web Search Results for "${query}"]\n${summary}\n\n[System: Continue your response based on these results.]`;
           loopCount++;
           continue;
@@ -230,19 +239,28 @@ export class AgentService {
         await bot.sendMessage(chatId, `🔍 <i>Searching the web for "${query}"...</i>`, { parse_mode: 'HTML' });
         
         try {
-          const fetchRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-          });
-          const html = await fetchRes.text();
-          
-          const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/g;
-          let snippets = [];
-          let sMatch;
-          while ((sMatch = snippetRegex.exec(html)) !== null && snippets.length < 3) {
-            snippets.push(sMatch[1].replace(/<[^>]+>/g, '').trim());
+          const { redisCache } = await import('../lib/redis');
+          const cacheKey = `search_ddg_${query.replace(/\s+/g, '_')}`;
+          let summary = await redisCache.get<string>(cacheKey);
+
+          if (!summary) {
+            const fetchRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+            });
+            const html = await fetchRes.text();
+            
+            const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/g;
+            let snippets = [];
+            let sMatch;
+            while ((sMatch = snippetRegex.exec(html)) !== null && snippets.length < 3) {
+              snippets.push(sMatch[1].replace(/<[^>]+>/g, '').trim());
+            }
+            
+            summary = snippets.length > 0 ? snippets.join('\n\n') : "No relevant search results found.";
+            if (snippets.length > 0) {
+              await redisCache.set(cacheKey, summary, 3600); // 1 hour
+            }
           }
-          
-          const summary = snippets.length > 0 ? snippets.join('\n\n') : "No relevant search results found.";
           currentPrompt = `[System: Web Search Results for "${query}"]\n${summary}\n\n[System: Continue your response based on these results.]`;
           history = await getChatHistory(user.id, 12);
           loopCount++;

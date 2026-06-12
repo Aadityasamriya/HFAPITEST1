@@ -29,7 +29,7 @@ export async function getDb(): Promise<Db> {
   return dbInstance;
 }
 
-export async function getUser(telegramId: string | number, firstName?: string, username?: string) {
+export async function getUser(telegramId: string | number, firstName?: string, username?: string, photoUrl?: string) {
   const db = await getDb();
   const idStr = telegramId.toString();
   let user = await db.collection('users').findOne({ telegram_id: idStr });
@@ -39,6 +39,7 @@ export async function getUser(telegramId: string | number, firstName?: string, u
       telegram_id: idStr,
       name: firstName || 'User',
       username: username || '',
+      photo_url: photoUrl || null,
       hf_api_key: null,
       previous_api_keys: [],
       active_topic_id: `topic_${Date.now()}`,
@@ -46,10 +47,20 @@ export async function getUser(telegramId: string | number, firstName?: string, u
     };
     const result = await db.collection('users').insertOne(newUser);
     user = { _id: result.insertedId, ...newUser };
-  } else if (username && user.username !== username) {
-    // Update username if it changed
-    await db.collection('users').updateOne({ _id: user._id }, { $set: { username } });
-    user.username = username;
+  } else {
+    let updates: any = {};
+    if (username && user.username !== username) {
+      updates.username = username;
+      user.username = username;
+    }
+    if (photoUrl && user.photo_url !== photoUrl) {
+      updates.photo_url = photoUrl;
+      user.photo_url = photoUrl;
+    }
+    
+    if (Object.keys(updates).length > 0) {
+      await db.collection('users').updateOne({ _id: user._id }, { $set: updates });
+    }
   }
   
   if (!user.active_topic_id) {
@@ -63,6 +74,7 @@ export async function getUser(telegramId: string | number, firstName?: string, u
     id: user._id.toString(),
     hfApiKey: user.hf_api_key,
     name: user.name,
+    photoUrl: user.photo_url,
     activeTopicId: user.active_topic_id,
     memory: user.memory
   };
@@ -105,7 +117,7 @@ export async function registerOrUpdateUserWeb(identifier: string, apiKey: string
 
   if (user) {
     // User exists, check API key
-    if (user.hf_api_key !== apiKey) {
+    if (apiKey && user.hf_api_key !== apiKey) {
       // Store old key if it exists and is not already in previous_api_keys
       const previousKeys = user.previous_api_keys || [];
       if (user.hf_api_key && !previousKeys.includes(user.hf_api_key)) {

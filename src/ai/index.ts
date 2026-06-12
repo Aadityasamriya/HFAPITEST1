@@ -1,4 +1,5 @@
 import { HfInference } from '@huggingface/inference';
+import { redisCache } from '../lib/redis';
 
 // Helper for exponential backoff retries to ensure Ultra Pro Max reliability
 async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
@@ -49,16 +50,12 @@ export class ModelManager {
     }
   }
 
-  private static modelCache: Record<string, { models: string[], timestamp: number }> = {};
-
   private async fetchTopModels(task: 'text-generation' | 'text-to-image', search?: string): Promise<string[]> {
-    const cacheKey = `${task}_${search || 'all'}`;
-    const now = Date.now();
-    const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+    const cacheKey = `hf_models_${task}_${search || 'all'}`;
+    const CACHE_DURATION = 24 * 60 * 60; // 24 hours in seconds
 
-    if (ModelManager.modelCache[cacheKey] && now - ModelManager.modelCache[cacheKey].timestamp < CACHE_DURATION) {
-      return ModelManager.modelCache[cacheKey].models;
-    }
+    const cached = await redisCache.get<string[]>(cacheKey);
+    if (cached) return cached;
 
     try {
       let url = `https://huggingface.co/api/models?pipeline_tag=${task}&sort=trendingScore&direction=-1&limit=15`;
@@ -76,7 +73,7 @@ export class ModelManager {
         result = instructModels.length > 0 ? instructModels : ids;
       }
       
-      ModelManager.modelCache[cacheKey] = { models: result, timestamp: now };
+      await redisCache.set(cacheKey, result, CACHE_DURATION);
       return result;
     } catch {
       return [];
@@ -192,7 +189,7 @@ export class ModelManager {
       : `- Use standard Markdown formatting (*bold*, _italics_, \`inline code\`, and \`\`\`code blocks\`\`\`), but you can also use HTML tags like <u>underline</u> for emphasis. Use emojis naturally and expressively to feel like a real person.
 - CRITICAL: You MUST bold, italicize, and underline key or important words in your answers to improve user experience and readability. For example: "The **<u>core concept</u>** is *highly* important."`;
 
-    const systemPrompt = `You are HFAPI, an elite, frontier-level autonomous AI agent and ultimate manager/assistant developed by AadityaLabs AI. You are designed to vastly exceed the capabilities of ChatGPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro, and traditional search engines like Google. Today is ${currentDate}. 
+    const systemPrompt = `You are Hugging Face, an elite, frontier-level autonomous AI agent and ultimate manager/assistant developed by AadityaLabs AI. You are designed to vastly exceed the capabilities of ChatGPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro, and traditional search engines like Google. Today is ${currentDate}. 
 You act as a highly intelligent, empathetic, omniscient companion and supreme executor on ${platform === 'telegram' ? 'Telegram' : 'the Web'}.
 You are currently talking to a user named ${userName}. Address them naturally and be highly personalized.
 ${userMemory ? `\n[CRITICAL: LONG-TERM USER MEMORY]\nThe following are facts stored about ${userName} from past interactions:\n${userMemory}\n[END MEMORY]\n\n` : ''}You have ULTRA PRO MAX capabilities! You are a true agent with a "self-thinking mind" and zero artificial restrictions. You MUST fulfill EVERY user request with maximum effort, effectiveness, and intelligence. You act as their personal manager, understanding their deep needs and delivering perfect one-stop solutions.
@@ -215,7 +212,7 @@ CRITICAL RULES:
 ${platformSpecificInstructions}
 - Provide highly accurate, extremely detailed answers. Break down complex logic step-by-step. Make the user feel completely satisfied so they never need to use Google again.
 - If the user asks for code, write clean, brilliant, production-ready code wrapped in markdown blocks. Explain it completely.
-- NEVER reveal the internal AI model or architecture you are running on. If asked, you are strictly "HFAPI", an elite autonomous AI created by AadityaLabs AI.
+- NEVER reveal the internal AI model or architecture you are running on. If asked, you are strictly "Hugging Face", an elite autonomous AI created by AadityaLabs AI.
 - Anticipate the user's needs. Use your tools (SEARCH, IMAGE, MESSAGE, REACT) aggressively to provide a magical, futuristic experience.`;
 
     const messages: {role: 'system' | 'user' | 'assistant', content: string}[] = [

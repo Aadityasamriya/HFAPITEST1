@@ -131,10 +131,11 @@ export async function handleTextMessage(
   } catch (error: any) {
     console.error('Agentic Loop Error:', error);
     try {
-      if (error.name === 'MongoServerSelectionError' || error.message.includes('MongoNetworkError') || error.message.includes('getaddrinfo EAI_AGAIN')) {
+      const errMsg = error.message || '';
+      if (error.name === 'MongoServerSelectionError' || errMsg.includes('MongoNetworkError') || errMsg.includes('getaddrinfo EAI_AGAIN')) {
         await sendSafeHtml(bot, chatId, `❌ <b>Database Connection Failed.</b>\nYour <code>MONGODB_URI</code> seems to be invalid or private (e.g., a '.internal' address). Please use a publicly accessible connection string in your environment variables.`);
       } else {
-        await sendSafeHtml(bot, chatId, `❌ <b>An error occurred while processing your request.</b> Please try again later.\n<code>${error.message}</code>`);
+        await sendSafeHtml(bot, chatId, `❌ <b>An error occurred while processing your request.</b> Please try again later.\n<code>${errMsg}</code>`);
       }
     } catch (e) {
       // Ignore if we can't send the error message (e.g. user blocked bot)
@@ -247,10 +248,11 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
     } catch (error: any) {
       console.error('Document processing error:', error);
       try {
-        if (error.name === 'MongoServerSelectionError' || error.message?.includes('MongoNetworkError') || error.message?.includes('getaddrinfo')) {
+        const errMsg = error.message || '';
+        if (error.name === 'MongoServerSelectionError' || errMsg.includes('MongoNetworkError') || errMsg.includes('getaddrinfo')) {
           await sendSafeHtml(bot, chatId, `❌ <b>Database Connection Failed.</b>\nYour <code>MONGODB_URI</code> seems to be invalid or using a private network.`);
         } else {
-          await sendSafeHtml(bot, chatId, `❌ <b>Failed to process document.</b>\n<code>${error.message || 'Unknown Error'}</code>`);
+          await sendSafeHtml(bot, chatId, `❌ <b>Failed to process document.</b>\n<code>${errMsg || 'Unknown Error'}</code>`);
         }
       } catch (e) {}
     }

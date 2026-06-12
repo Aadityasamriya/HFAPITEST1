@@ -27,6 +27,14 @@
     "ADMIN_TELEGRAM_ID": {
       "description": "Optional: Your Telegram User ID. If set, unlocks admin commands like /stats.",
       "required": false
+    },
+    "REDIS_URL": {
+      "description": "Optional: Redis connection string (e.g., redis://...) for rate limiting and fast caching.",
+      "required": false
+    },
+    "PUBLIC_URL": {
+      "description": "Optional: The public URL of the deployed web application (e.g., https://my-app.up.railway.app). Used for login magic links.",
+      "required": false
     }
   }
 }

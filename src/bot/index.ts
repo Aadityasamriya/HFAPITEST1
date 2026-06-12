@@ -1,5 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { handleStartCommand, handleSettingsCommand, handleNewChatCommand, handleResetDbCommand, handleAdminCommand, handleHistoryCommand } from './commands/index';
+import { handleStartCommand, handleSettingsCommand, handleNewChatCommand, handleResetDbCommand, handleAdminCommand, handleHistoryCommand, handleLoginCommand } from './commands/index';
 import { handleTextMessage, handleVoiceMessage, handleDocumentMessage, handlePollAnswer } from './handlers/index';
 
 // State to track if user is currently entering an API key
@@ -28,19 +28,45 @@ export async function startBot(token: string) {
   bot.onText(/^\/history$/, (msg) => handleHistoryCommand(bot, msg));
   bot.onText(/^\/resetdb$/, (msg) => handleResetDbCommand(bot, msg));
   bot.onText(/^\/admin$/, (msg) => handleAdminCommand(bot, msg, waitingForBroadcast));
+  bot.onText(/^\/(login|web)$/, (msg) => handleLoginCommand(bot, msg));
 
   // --- Message Handlers ---
   bot.on('message', async (msg) => {
+    if (msg.from) {
+      const { redisCache } = await import('../lib/redis');
+      const rateLimitKey = `rate_limit_tg_${msg.from.id}`;
+      // Max 10 messages per 30 seconds
+      const count = await redisCache.incrementRateLimit(rateLimitKey, 30);
+      if (count > 10) {
+        if (count === 11) {
+          await bot.sendMessage(msg.chat.id, "⚠️ <b>Spam Detected</b>\nYou are sending messages too quickly. Please wait 30 seconds before trying again.", { parse_mode: 'HTML' });
+        }
+        return; // drop message
+      }
+    }
+
     if (msg.text) {
       await handleTextMessage(bot, msg, waitingForApiKey, waitingForBroadcast);
     }
   });
 
   bot.on('voice', async (msg) => {
+    if (msg.from) {
+      const { redisCache } = await import('../lib/redis');
+      const rateLimitKey = `rate_limit_tg_${msg.from.id}`;
+      const count = await redisCache.incrementRateLimit(rateLimitKey, 30);
+      if (count > 10) return;
+    }
     await handleVoiceMessage(bot, msg);
   });
 
   bot.on('document', async (msg) => {
+    if (msg.from) {
+      const { redisCache } = await import('../lib/redis');
+      const rateLimitKey = `rate_limit_tg_${msg.from.id}`;
+      const count = await redisCache.incrementRateLimit(rateLimitKey, 30);
+      if (count > 10) return;
+    }
     await handleDocumentMessage(bot, msg);
   });
   
@@ -69,6 +95,11 @@ export async function startBot(token: string) {
       await handleHistoryCommand(bot, query.message!);
       return;
     }
+    if (query.data === 'action_login_web') {
+      await bot.answerCallbackQuery(query.id);
+      await handleLoginCommand(bot, query.message!);
+      return;
+    }
 
     if (query.data && query.data.startsWith('topic_')) {
       const topicId = query.data.replace('topic_', '');
@@ -84,7 +115,7 @@ export async function startBot(token: string) {
       
       let historyText = `📜 <b>History for Topic</b>\n\n`;
       history.reverse().forEach(msg => {
-        const role = msg.role === 'user' ? '👤 <b>You:</b>' : '🤖 <b>HFAPI:</b>';
+        const role = msg.role === 'user' ? '👤 <b>You:</b>' : '🤖 <b>Hugging Face:</b>';
         // Truncate long messages for display
         const content = msg.content.length > 200 ? msg.content.substring(0, 200) + '...' : msg.content;
         historyText += `${role} ${content}\n\n`;
@@ -96,9 +127,9 @@ export async function startBot(token: string) {
 
   // Profile Setup
   try {
-    await bot.setMyName({ name: 'HFAPI - Supervised Agent' });
+    await bot.setMyName({ name: 'Hugging Face' });
     await bot.setMyShortDescription({ short_description: 'Advanced Intelligence. Chat, search the web, generate images, and read files seamlessly.' });
-    await bot.setMyDescription({ description: 'Welcome to HFAPI, your absolute ultimate Artificial Intelligence manager.\n\nCapabilities include:\n- Intelligent Chat and Coding\n- Real-Time Web Search\n- Breathtaking Image Generation\n- PDF Document Analysis\n- Voice Recognition\n\nProvide your API key and unleash frontier AI today!' });
+    await bot.setMyDescription({ description: 'Welcome to Hugging Face, your absolute ultimate Artificial Intelligence manager.\n\nCapabilities include:\n- Intelligent Chat and Coding\n- Real-Time Web Search\n- Breathtaking Image Generation\n- PDF Document Analysis\n- Voice Recognition\n\nProvide your API key and unleash frontier AI today!' });
     
     await bot.setMyCommands([
       { command: '/start', description: '🚀 Start or reboot the bot' },
@@ -106,6 +137,7 @@ export async function startBot(token: string) {
       { command: '/history', description: '📜 View past conversations' },
       { command: '/settings', description: '⚙️ Configure API Key & Settings' },
       { command: '/resetdb', description: '🗑️ Wipe your entire database profile' },
+      { command: '/login', description: '🌍 Get Web Dashboard magic link' },
       { command: '/admin', description: '👨‍💻 Admin Panel (Restricted)' }
     ]);
   } catch (error) {

@@ -1,0 +1,1 @@
+export const LogoBase64 = 'data:image/jpeg;base64,PD94bWwgdmVyc2lvbj0nMS4wJyBlbmNvZGluZz0nVVRGLTgnPz48RXJyb3I+PENvZGU+Tm9TdWNoQnVja2V0PC9Db2RlPjxNZXNzYWdlPlRoZSBzcGVjaWZpZWQgYnVja2V0IGRvZXMgbm90IGV4aXN0LjwvTWVzc2FnZT48L0Vycm9yPg==';
