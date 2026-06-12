@@ -112,45 +112,17 @@ export async function handleResetDbCommand(bot: TelegramBot, msg: TelegramBot.Me
 export async function handleLoginCommand(bot: TelegramBot, msg: TelegramBot.Message) {
   const chatId = msg.chat.id;
   try {
-    const fromId = msg.from!.id;
-    let photoUrl = '';
-    
-    // Fetch profile photo
-    try {
-      const profilePhotos = await bot.getUserProfilePhotos(fromId, { limit: 1 });
-      if (profilePhotos.total_count > 0 && profilePhotos.photos[0].length > 0) {
-        const fileId = profilePhotos.photos[0][0].file_id;
-        const file = await bot.getFile(fileId);
-        photoUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
-      }
-    } catch(e) {
-      console.warn("Failed to get profile photo:", e);
-    }
-    
-    // This updates the user with the latest photo url in the DB
-    await getUser(fromId, msg.from!.first_name, msg.from!.username, photoUrl);
-    
-    // Generate secure login token using Redis
-    const { redisCache } = await import('../../lib/redis');
-    const { randomBytes } = await import('crypto');
-    const token = randomBytes(24).toString('hex');
-    await redisCache.set(`magic_link_${token}`, fromId.toString(), 600); // 10 mins expiry
-    
-    // We send a relative link that works wherever the app is hosted
-    // Let's use the standard railway URL if PUBLIC_URL isn't set
     const webUrl = process.env.PUBLIC_URL || 'https://ais-pre-kqqznwd43u52hcij2wfzgv-15028068203.asia-east1.run.app';
-    const magicLink = `${webUrl}/?login_token=${token}`;
     
-    await sendSafeHtml(bot, chatId, `🔐 <b>Secure Web Login</b>\n\nClick the link below or the button to seamlessly log into the Web Dashboard. This magic link expires in 10 minutes.\n\n<a href="${magicLink}">Login to Web Dashboard 🚀</a>`, {
+    await sendSafeHtml(bot, chatId, `🔐 <b>Web Dashboard</b>\n\nClick the button below to open the Web Dashboard and log in seamlessly using Telegram Auth.\n\n<a href="${webUrl}">Open Web Dashboard 🚀</a>`, {
       disable_web_page_preview: true,
       reply_markup: {
-        inline_keyboard: [[{ text: "💻 Open Web Dashboard", url: magicLink }]]
+        inline_keyboard: [[{ text: "💻 Open Web Dashboard", url: webUrl }]]
       }
     });
-
   } catch (error: any) {
     console.error('Login Command Error:', error);
-    await sendSafeHtml(bot, chatId, `❌ <b>Failed to generate login link.</b> Please try again.`);
+    await sendSafeHtml(bot, chatId, `❌ <b>Failed to generate dashboard link.</b> Please try again.`);
   }
 }
 
