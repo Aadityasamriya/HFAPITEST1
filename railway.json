@@ -20,6 +20,10 @@
       "description": "Your Telegram Bot Token from @BotFather. Required to run the bot.",
       "required": true
     },
+    "TELEGRAM_CLIENT_SECRET": {
+      "description": "Your Telegram OIDC Client Secret (sometimes different from Bot Token). Required for Web Login.",
+      "required": true
+    },
     "MONGODB_URI": {
       "description": "Your MongoDB connection string (e.g., mongodb+srv://...). Required for database storage.",
       "required": true

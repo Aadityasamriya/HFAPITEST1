@@ -123,35 +123,11 @@ const InputAccessory = () => {
   )
 }
 
-const TelegramLoginWidget = ({ botName, onAuth }: { botName: string, onAuth: (user: any) => void }) => {
-  useEffect(() => {
-    (window as any).onTelegramAuth = onAuth;
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', botName);
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-radius', '16');
-    script.setAttribute('data-request-access', 'write');
-    script.setAttribute('data-userpic', 'false');
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-    document.getElementById('telegram-login-container')?.appendChild(script);
-
-    return () => {
-      delete (window as any).onTelegramAuth;
-      const container = document.getElementById('telegram-login-container');
-      if (container) container.innerHTML = '';
-    };
-  }, [botName, onAuth]);
-
-  return <div id="telegram-login-container" className="flex justify-center mt-3"></div>;
-};
-
 export default function App() {
   const [user, setUser] = useState<UserData | null>(null);
   const [authApiKey, setAuthApiKey] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
-  const [config, setConfig] = useState<any>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -167,8 +143,6 @@ export default function App() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    fetch('/api/web/config').then(r => r.json()).then(setConfig).catch(console.error);
-
     const handleResize = () => setSidebarOpen(window.innerWidth >= 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -298,31 +272,6 @@ export default function App() {
     }
   };
 
-  const handleTelegramWidgetAuth = async (telegramUser: any) => {
-    setAuthLoading(true);
-    setAuthError('');
-    try {
-      const res = await fetch('/api/web/telegram-auth-widget', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(telegramUser)
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setUser(data.user);
-        localStorage.setItem('hfapi_user', JSON.stringify(data.user));
-        loadTopics(data.user.telegram_id);
-      } else {
-        setAuthError(data.error || 'Authentication via Telegram failed');
-      }
-    } catch (err: any) {
-      setAuthError(err.message || 'Network error');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   // ---------------- AUTH SCREEN ----------------
   if (!user) {
     return (
@@ -342,28 +291,28 @@ export default function App() {
           </div>
 
           <div className="px-8 pb-10 flex flex-col items-center">
-            {config?.botUsername ? (
-              <div className="flex flex-col items-center">
-                <TelegramLoginWidget botName={config.botUsername} onAuth={handleTelegramWidgetAuth} />
-              </div>
-            ) : (
-              <div className="p-4 bg-orange-50 text-orange-700 text-sm rounded-2xl border border-orange-100 text-center">
-                Telegram login is not fully configured yet. Please wait for an administrator to add TELEGRAM_BOT_USERNAME to the environment variables.
-              </div>
-            )}
-
+            <a 
+              href="/api/web/telegram-oauth/login"
+              className="w-full py-4 bg-[#2481cc] hover:bg-[#1d6ba8] text-white font-semibold rounded-2xl shadow-md transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 0C5.372 0 0 5.372 0 12C0 18.628 5.372 24 12 24C18.628 24 24 18.628 24 12C24 5.372 18.628 0 12 0ZM17.472 8.35L15.42 17.986C15.266 18.656 14.869 18.825 14.301 18.508L11.206 16.223L9.712 17.658C9.547 17.824 9.412 17.958 9.091 17.958L9.314 14.793L15.067 9.601C15.317 9.378 15.013 9.255 14.678 9.479L7.568 13.957L4.502 12.996C3.834 12.787 3.82 12.33 4.641 12.008L16.637 7.382C17.189 7.172 17.669 7.502 17.472 8.35Z" fill="currentColor"/>
+              </svg>
+              Login with Telegram
+            </a>
+            
             {authError && (
-              <div className="p-4 mt-6 bg-rose-50 text-rose-600 text-sm rounded-xl border border-rose-100 font-medium text-center">
+              <div className="p-4 mt-6 bg-rose-50 text-rose-600 text-sm rounded-xl border border-rose-100 font-medium text-center w-full">
                 {authError}
               </div>
             )}
             {authLoading && (
-              <div className="mt-6 flex justify-center text-blue-500">
+              <div className="mt-6 flex justify-center text-blue-500 w-full">
                 <Loader2 className="w-6 h-6 animate-spin" />
               </div>
             )}
             <p className="mt-6 text-xs text-neutral-400 text-center px-4 leading-relaxed">
-              Using the official Telegram Login Widget protocol.
+              Using the new official Telegram OpenID Connect (OIDC) authorization protocol.
             </p>
           </div>
         </motion.div>

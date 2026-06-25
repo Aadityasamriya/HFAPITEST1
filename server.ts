@@ -50,50 +50,111 @@ async function startServer() {
     }
   });
 
-  // --- Telegram Login Widget Auth ---
+  // --- Telegram OpenID Connect Login ---
   
-  app.get('/api/web/config', (req, res) => {
-    res.json({ 
-      success: true, 
-      botUsername: process.env.TELEGRAM_BOT_USERNAME || '',
-      requiresSetup: !process.env.TELEGRAM_BOT_USERNAME
-    });
+  app.get('/api/web/telegram-oauth/login', (req, res) => {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      return res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN is missing.' });
+    }
+    
+    // Telegram OpenID uses the Bot ID as client_id (the part before the colon)
+    const clientId = botToken.split(':')[0];
+    let redirectUri = process.env.TELEGRAM_REDIRECT_URI;
+    
+    if (!redirectUri) {
+      // Auto-detect redirect URI if not set (useful for platforms like Railway)
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers.host;
+      redirectUri = `${protocol}://${host}/api/web/telegram-oauth-callback`;
+    }
+
+    const state = Math.random().toString(36).substring(2, 15);
+    res.cookie('oauth_state', state, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+
+    const authUrl = `https://oauth.telegram.org/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid%20profile&state=${state}`;
+    res.redirect(authUrl);
   });
 
-  app.post('/api/web/telegram-auth-widget', async (req, res) => {
+  app.get('/api/web/telegram-oauth-callback', async (req, res) => {
+    const { code, error } = req.query;
+    
+    if (error) {
+       return res.status(400).send(`Authentication error: ${error}`);
+    }
+    if (!code) {
+       return res.status(400).send('No authorization code provided.');
+    }
+
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      return res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN is missing.' });
+    }
+    
+    const clientId = botToken.split(':')[0];
+    const clientSecret = process.env.TELEGRAM_CLIENT_SECRET;
+    let redirectUri = process.env.TELEGRAM_REDIRECT_URI;
+
+    if (!clientSecret) {
+      return res.status(500).json({ error: 'TELEGRAM_CLIENT_SECRET is missing.' });
+    }
+    
+    if (!redirectUri) {
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers.host;
+      redirectUri = `${protocol}://${host}/api/web/telegram-oauth-callback`;
+    }
+
     try {
-      const data = req.body;
-      const crypto = await import('crypto');
-      const token = process.env.TELEGRAM_BOT_TOKEN;
-      if (!token) return res.status(500).json({ error: 'Bot token not configured' });
+      const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+      const tokenRes = await fetch('https://oauth.telegram.org/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${credentials}`
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: code as string,
+          redirect_uri: redirectUri as string
+        })
+      });
 
-      // Telegram verification logic
-      const checkString = Object.keys(data)
-        .filter(key => key !== 'hash')
-        .sort()
-        .map(key => `${key}=${data[key]}`)
-        .join('\n');
-        
-      const secretKey = crypto.createHash('sha256').update(token).digest();
-      const hash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
-      
-      if (hash !== data.hash) {
-        return res.status(403).json({ error: 'Data is NOT from Telegram' });
-      }
-      
-      // Check auth date. Expire in 10 minutes to prevent replay attacks
-      if (Date.now() / 1000 - data.auth_date > 600) {
-        return res.status(403).json({ error: 'Auth session expired' });
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        console.error('Token exchange failed:', errText);
+        return res.status(tokenRes.status).send('Failed to exchange authorization code.');
       }
 
-      // Validated. Register or update the user
+      const tokenData = await tokenRes.json();
+      const idToken = tokenData.id_token;
+      if (!idToken) throw new Error('No id_token received');
+      
+      const payloadBase64 = idToken.split('.')[1];
+      const payloadStr = Buffer.from(payloadBase64, 'base64').toString('utf8');
+      const payload = JSON.parse(payloadStr);
+
+      const telegramId = payload.sub;
+      const name = payload.name || 'User';
+      const username = payload.preferred_username || '';
+      const photoUrl = payload.picture || '';
+
       const { getUser } = await import('./src/db/index');
-      const name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.username || 'User';
-      const user = await getUser(data.id, name, data.username, data.photo_url);
-      
-      res.json({ success: true, user });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      const user = await getUser(telegramId, name, username, photoUrl);
+
+      res.send(`
+        <html>
+          <body>
+            <script>
+              window.localStorage.setItem('hfapi_user', JSON.stringify(${JSON.stringify(user)}));
+              window.location.href = '/';
+            </script>
+          </body>
+        </html>
+      `);
+    } catch (err: any) {
+      console.error('OAuth Callback Error:', err);
+      res.status(500).send('An error occurred during authentication.');
     }
   });
 
