@@ -128,10 +128,14 @@ export async function handleLoginCommand(bot: TelegramBot, msg: TelegramBot.Mess
 
 export async function handleAdminCommand(bot: TelegramBot, msg: TelegramBot.Message, waitingForBroadcast: Set<number>) {
   const chatId = msg.chat.id;
+  const adminId = process.env.ADMIN_TELEGRAM_ID;
   
-  // Check if user is admin (you can set an ADMIN_ID env var, or just check a specific ID)
-  // For now, we'll just show stats to anyone who types /admin for simplicity, 
-  // but in a real app you'd restrict this.
+  // Check if user is admin
+  if (!adminId || msg.from?.id.toString() !== adminId) {
+    await sendSafeHtml(bot, chatId, `❌ <b>Access Denied.</b> You are not an administrator.`);
+    return;
+  }
+  
   const stats = await getStats();
   
   const adminMsg = `
