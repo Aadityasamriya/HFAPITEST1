@@ -127,10 +127,6 @@ export async function startBot(token: string) {
 
   // Profile Setup
   try {
-    await bot.setMyName({ name: 'Hugging Face' });
-    await bot.setMyShortDescription({ short_description: 'Advanced Intelligence. Chat, search the web, generate images, and read files seamlessly.' });
-    await bot.setMyDescription({ description: 'Welcome to Hugging Face, your absolute ultimate Artificial Intelligence manager.\n\nCapabilities include:\n- Intelligent Chat and Coding\n- Real-Time Web Search\n- Breathtaking Image Generation\n- PDF Document Analysis\n- Voice Recognition\n\nProvide your API key and unleash frontier AI today!' });
-    
     await bot.setMyCommands([
       { command: '/start', description: '🚀 Start or reboot the bot' },
       { command: '/newchat', description: '💬 Start a fresh conversation' },
@@ -138,8 +134,8 @@ export async function startBot(token: string) {
       { command: '/settings', description: '⚙️ Configure API Key & Settings' },
       { command: '/resetdb', description: '🗑️ Wipe your entire database profile' }
     ]);
-  } catch (error) {
-    console.error('Failed to setup bot profile settings:', error);
+  } catch (error: any) {
+    console.warn(`[Bot Profile Setup] Could not set commands (possibly rate limited). Continuing...`);
   }
 
   console.log('Bot is running with Enterprise Modular Architecture...');
