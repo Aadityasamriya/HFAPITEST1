@@ -136,9 +136,7 @@ export async function startBot(token: string) {
       { command: '/newchat', description: '💬 Start a fresh conversation' },
       { command: '/history', description: '📜 View past conversations' },
       { command: '/settings', description: '⚙️ Configure API Key & Settings' },
-      { command: '/resetdb', description: '🗑️ Wipe your entire database profile' },
-      { command: '/login', description: '🌍 Get Web Dashboard magic link' },
-      { command: '/admin', description: '👨‍💻 Admin Panel (Restricted)' }
+      { command: '/resetdb', description: '🗑️ Wipe your entire database profile' }
     ]);
   } catch (error) {
     console.error('Failed to setup bot profile settings:', error);
