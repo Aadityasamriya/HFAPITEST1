@@ -6,10 +6,7 @@ import { sendSafeHtml, withContinuousAction, processAndSendAiResponse } from '..
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
+import pdfParse from 'pdf-parse';
 
 export async function handlePollAnswer(bot: TelegramBot, pollAnswer: TelegramBot.PollAnswer) {
   try {
