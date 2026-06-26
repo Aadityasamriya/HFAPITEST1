@@ -156,9 +156,31 @@ export default function App() {
         const u = JSON.parse(savedUserStr);
         setUser(u);
         loadTopics(u.telegram_id || u.id);
+        return;
       } catch (e) {
         localStorage.removeItem('hfapi_user');
       }
+    }
+
+    // Telegram Mini App auto-login
+    const tgApp = (window as any).Telegram?.WebApp;
+    if (tgApp && tgApp.initData) {
+      setAuthLoading(true);
+      fetch('/api/web/telegram-miniapp/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tgApp.initData })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.user) {
+           setUser(data.user);
+           localStorage.setItem('hfapi_user', JSON.stringify(data.user));
+           loadTopics(data.user.telegram_id || data.user.id);
+        }
+      })
+      .catch(err => console.error('MiniApp login failed:', err))
+      .finally(() => setAuthLoading(false));
     }
   }, []);
 

@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import cors from 'cors';
+import crypto from 'crypto';
 import { startBot } from './src/bot/index';
 
 async function startServer() {
@@ -155,6 +156,53 @@ async function startServer() {
     } catch (err: any) {
       console.error('OAuth Callback Error:', err);
       res.status(500).send('An error occurred during authentication.');
+    }
+  });
+
+  // --- Telegram Mini App Auto-Login ---
+  app.post('/api/web/telegram-miniapp/login', async (req, res) => {
+    const { initData } = req.body;
+    if (!initData) return res.status(400).json({ error: 'No init data provided' });
+
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) return res.status(500).json({ error: 'Server misconfiguration: No bot token' });
+
+    try {
+      const urlParams = new URLSearchParams(initData);
+      const hash = urlParams.get('hash');
+      urlParams.delete('hash');
+      urlParams.sort();
+
+      let dataCheckString = '';
+      for (const [key, value] of urlParams.entries()) {
+        dataCheckString += `${key}=${value}\n`;
+      }
+      dataCheckString = dataCheckString.slice(0, -1);
+
+      const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+      const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+
+      if (calculatedHash !== hash) {
+        return res.status(401).json({ error: 'Invalid authentication data' });
+      }
+
+      const userJson = urlParams.get('user');
+      if (!userJson) return res.status(400).json({ error: 'No user data in init data' });
+
+      const tgUser = JSON.parse(userJson);
+      
+      const telegramId = tgUser.id.toString();
+      const name = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || 'User';
+      const username = tgUser.username || '';
+      const photoUrl = tgUser.photo_url || '';
+
+      const { getUser } = await import('./src/db/index');
+      const user = await getUser(telegramId, name, username, photoUrl);
+
+      res.json({ success: true, user });
+    } catch (e: any) {
+      console.error('MiniApp login error:', e);
+      res.status(500).json({ error: 'Failed to process login' });
     }
   });
 
