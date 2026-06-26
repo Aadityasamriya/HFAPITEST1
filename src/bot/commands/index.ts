@@ -7,6 +7,7 @@ export async function handleStartCommand(bot: TelegramBot, msg: TelegramBot.Mess
   const chatId = msg.chat.id;
   try {
     const user = await getUser(msg.from!.id, msg.from!.first_name, msg.from!.username);
+    const webUrl = process.env.PUBLIC_URL || 'https://ais-pre-kqqznwd43u52hcij2wfzgv-15028068203.asia-east1.run.app';
     
     const welcomeMessage = `
 🌟 <b>Welcome to Hugging Face, ${user.name}!</b> 🌟
@@ -17,7 +18,6 @@ I am a highly advanced AI Assistant. I can:
 🎙️ Transcribe voice messages
 🔍 Search the web for real-time info
 📄 Read PDFs and ZIP files
-🌍 Use /login to link this chat to the Web Dashboard!
 
 <b>To get started, you need to connect your API Key.</b>
 Get it for free here: <a href="https://huggingface.co/settings/tokens">API Tokens</a>
@@ -29,7 +29,7 @@ Get it for free here: <a href="https://huggingface.co/settings/tokens">API Token
         inline_keyboard: [
           [{ text: '⚙️ Configure API Key', callback_data: 'action_settings' }],
           [{ text: '➕ New Chat', callback_data: 'action_newchat' }, { text: '📜 History', callback_data: 'action_history' }],
-          [{ text: '💻 Secure Web Login (Link)', callback_data: 'action_login_web' }]
+          [{ text: '💻 Launch Mini App', web_app: { url: webUrl } }]
         ]
       }
     });
@@ -114,10 +114,10 @@ export async function handleLoginCommand(bot: TelegramBot, msg: TelegramBot.Mess
   try {
     const webUrl = process.env.PUBLIC_URL || 'https://ais-pre-kqqznwd43u52hcij2wfzgv-15028068203.asia-east1.run.app';
     
-    await sendSafeHtml(bot, chatId, `🔐 <b>Web Dashboard</b>\n\nClick the button below to open the Web Dashboard and log in seamlessly using Telegram Auth.\n\n<a href="${webUrl}">Open Web Dashboard 🚀</a>`, {
+    await sendSafeHtml(bot, chatId, `🔐 <b>Launch Mini App</b>\n\nClick the button below to open the app seamlessly inside Telegram.\nYour account will be connected instantly.`, {
       disable_web_page_preview: true,
       reply_markup: {
-        inline_keyboard: [[{ text: "💻 Open Web Dashboard", url: webUrl }]]
+        inline_keyboard: [[{ text: "🚀 Launch App", web_app: { url: webUrl } }]]
       }
     });
   } catch (error: any) {

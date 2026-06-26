@@ -10,6 +10,8 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './lib/utils';
 import { HuggingFaceLogo } from './components/Logo';
@@ -313,29 +315,63 @@ export default function App() {
           </div>
 
           <div className="px-8 pb-10 flex flex-col items-center">
-            <a 
-              href="/api/web/telegram-oauth/login"
-              className="w-full py-4 bg-[#2481cc] hover:bg-[#1d6ba8] text-white font-semibold rounded-2xl shadow-md transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 0C5.372 0 0 5.372 0 12C0 18.628 5.372 24 12 24C18.628 24 24 18.628 24 12C24 5.372 18.628 0 12 0ZM17.472 8.35L15.42 17.986C15.266 18.656 14.869 18.825 14.301 18.508L11.206 16.223L9.712 17.658C9.547 17.824 9.412 17.958 9.091 17.958L9.314 14.793L15.067 9.601C15.317 9.378 15.013 9.255 14.678 9.479L7.568 13.957L4.502 12.996C3.834 12.787 3.82 12.33 4.641 12.008L16.637 7.382C17.189 7.172 17.669 7.502 17.472 8.35Z" fill="currentColor"/>
-              </svg>
-              Login with Telegram
-            </a>
+            <div className="w-full p-5 bg-blue-50/50 rounded-2xl border border-blue-100/50 mb-6 text-center">
+               <h3 className="text-blue-900 font-semibold mb-2">Telegram Mini App</h3>
+               <p className="text-blue-700/80 text-sm leading-relaxed">
+                 This interface is designed to run seamlessly inside Telegram. Please open the bot and launch the App to automatically log in.
+               </p>
+               <a 
+                 href="https://t.me/"
+                 target="_blank"
+                 rel="noreferrer"
+                 className="inline-block mt-4 px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
+                 onClick={(e) => {
+                   e.preventDefault();
+                   alert('Please launch the Mini App from your Telegram Bot directly.');
+                 }}
+               >
+                 Launch via Telegram
+               </a>
+            </div>
             
-            {authError && (
-              <div className="p-4 mt-6 bg-rose-50 text-rose-600 text-sm rounded-xl border border-rose-100 font-medium text-center w-full">
-                {authError}
-              </div>
-            )}
-            {authLoading && (
-              <div className="mt-6 flex justify-center text-blue-500 w-full">
-                <Loader2 className="w-6 h-6 animate-spin" />
-              </div>
-            )}
-            <p className="mt-6 text-xs text-neutral-400 text-center px-4 leading-relaxed">
-              Using the new official Telegram OpenID Connect (OIDC) authorization protocol.
-            </p>
+            <div className="w-full text-left">
+             <div className="flex items-center justify-between mb-3">
+               <label className="text-sm font-semibold text-neutral-700">Developer / Manual Login (API Key)</label>
+             </div>
+             <div className="relative mb-3">
+               <input 
+                 type="password" value={authApiKey}
+                 onChange={e => setAuthApiKey(e.target.value)}
+                 placeholder="hf_..."
+                 className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 text-neutral-900 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
+               />
+             </div>
+             {authError && (
+               <div className="p-3 bg-rose-50 text-rose-600 text-sm rounded-xl border border-rose-100 font-medium mb-3">
+                 {authError}
+               </div>
+             )}
+             <button 
+               onClick={async () => {
+                 if (!authApiKey.trim()) return;
+                 setAuthLoading(true);
+                 setAuthError('');
+                 try {
+                   // A generic endpoint to login with an API key if the user is developer
+                   // We don't have this endpoint, but we could mock a login or just show error.
+                   setAuthError('Manual web login requires Telegram Mini App initData currently.');
+                 } catch(e: any) {
+                   setAuthError(e.message || 'Network error');
+                 } finally {
+                   setAuthLoading(false);
+                 }
+               }}
+               disabled={authLoading || !authApiKey.trim()}
+               className="w-full py-3.5 bg-neutral-900 hover:bg-neutral-800 text-white font-semibold rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-70 active:scale-[0.98]"
+             >
+               {authLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log In Manually'}
+             </button>
+            </div>
           </div>
         </motion.div>
       </div>
@@ -666,7 +702,32 @@ export default function App() {
                             ? "prose-invert prose-p:leading-relaxed" 
                             : "prose-neutral prose-p:leading-relaxed prose-pre:bg-neutral-900 prose-pre:text-white prose-pre:rounded-2xl prose-a:text-blue-600"
                         )}>
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{msg.content || ''}</ReactMarkdown>
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]} 
+                            rehypePlugins={[rehypeRaw]}
+                            components={{
+                              code({ node, inline, className, children, ...props }: any) {
+                                const match = /language-(\w+)/.exec(className || '');
+                                return !inline && match ? (
+                                  <SyntaxHighlighter
+                                    style={oneDark}
+                                    language={match[1]}
+                                    PreTag="div"
+                                    className="rounded-xl my-4 text-sm !bg-[#1E1E1E]"
+                                    {...props}
+                                  >
+                                    {String(children).replace(/\n$/, '')}
+                                  </SyntaxHighlighter>
+                                ) : (
+                                  <code className="bg-neutral-100 text-neutral-800 px-1.5 py-0.5 rounded-md text-sm font-mono" {...props}>
+                                    {children}
+                                  </code>
+                                );
+                              }
+                            }}
+                          >
+                            {msg.content || ''}
+                          </ReactMarkdown>
                         </div>
                       </div>
                     </div>
