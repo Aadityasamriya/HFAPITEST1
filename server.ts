@@ -21,7 +21,8 @@ async function startServer() {
   }
 
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // API routes
   app.get('/api/health', (req, res) => {
@@ -142,7 +143,7 @@ async function startServer() {
   });
 
   app.post('/api/chat', async (req, res) => {
-    const { message, history, hfApiKey, userName, userId, topicId } = req.body;
+    const { message, history, hfApiKey, userName, userId, topicId, attachment } = req.body;
     
     if (!hfApiKey) {
       return res.status(400).json({ error: 'Hugging Face API key is required' });
@@ -161,18 +162,64 @@ async function startServer() {
       const { AgentService } = await import('./src/services/agent.service');
       const { addMessage, saveTopic, getUserByUsernameOrId } = await import('./src/db/index');
       
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
       const ai = new ModelManager(hfApiKey);
       let userMemory: string | undefined;
       
+      let finalMessage = message;
+
+      if (attachment) {
+        try {
+          const base64Data = attachment.data.split(',')[1];
+          const buffer = Buffer.from(base64Data, 'base64');
+
+          if (attachment.type.startsWith('image/')) {
+             const analysis = await ai.analyzeImage(new Blob([buffer], { type: attachment.type }), message || 'describe this image');
+             finalMessage = `[Uploaded Image: ${attachment.name}]\nUser's prompt: ${message}\nImage Analysis: ${analysis}`;
+          } else if (attachment.type === 'application/pdf' || attachment.name.endsWith('.pdf')) {
+             const pdfParse = (await import('pdf-parse')).default;
+             const pdfData = await pdfParse(buffer);
+             const truncated = pdfData.text.substring(0, 15000);
+             finalMessage = `[Uploaded PDF: ${attachment.name}]\nDocument Content:\n${truncated}\n\nUser's prompt: ${message}`;
+          } else if (attachment.type.includes('zip') || attachment.name.endsWith('.zip')) {
+             const AdmZip = (await import('adm-zip')).default;
+             const zip = new AdmZip(buffer);
+             let extracted = '';
+             for (const entry of zip.getEntries()) {
+               if (!entry.isDirectory && !entry.entryName.startsWith('__MACOSX') && !entry.entryName.includes('.DS_Store')) {
+                 const content = entry.getData().toString('utf8');
+                 if (content.indexOf('\0') === -1) {
+                   extracted += `\n--- ${entry.entryName} ---\n${content.substring(0, 5000)}\n`;
+                 }
+               }
+             }
+             finalMessage = `[Uploaded ZIP: ${attachment.name}]\nContents:\n${extracted.substring(0, 15000)}\n\nUser's prompt: ${message}`;
+          } else {
+             const text = buffer.toString('utf8');
+             finalMessage = `[Uploaded File: ${attachment.name}]\nContent:\n${text.substring(0, 15000)}\n\nUser's prompt: ${message}`;
+          }
+        } catch (e: any) {
+          console.error('File parsing error:', e);
+          finalMessage = message + `\n[Failed to parse uploaded file ${attachment.name}: ${e.message}]`;
+        }
+      }
+
       if (userId) {
-        await addMessage(userId, 'user', message, topicId);
+        await addMessage(userId, 'user', finalMessage, topicId);
         const user = await getUserByUsernameOrId(userId);
         if (user && user.memory) {
           userMemory = user.memory;
         }
       }
       
-      const result = await AgentService.processWebMessage(ai, message, history || [], userName || 'User', userId, userMemory);
+      const onStatus = (status: string) => {
+        res.write(`data: ${JSON.stringify({ type: 'status', status })}\n\n`);
+      };
+
+      const result = await AgentService.processWebMessage(ai, finalMessage, history || [], userName || 'User', userId, userMemory, onStatus);
       
       if (userId) {
         await addMessage(userId, 'assistant', result.response, topicId);
@@ -191,7 +238,8 @@ async function startServer() {
         }
       }
       
-      res.json(result);
+      res.write(`data: ${JSON.stringify({ type: 'done', result })}\n\n`);
+      res.end();
     } catch (error: any) {
       console.error('Chat API Error:', error);
       if (error.name === 'MongoServerSelectionError' || error.message?.includes('getaddrinfo EAI_AGAIN')) {

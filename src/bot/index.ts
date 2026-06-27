@@ -1,6 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { handleStartCommand, handleSettingsCommand, handleNewChatCommand, handleResetDbCommand, handleAdminCommand, handleHistoryCommand, handleLoginCommand } from './commands/index';
-import { handleTextMessage, handleVoiceMessage, handleDocumentMessage, handlePollAnswer } from './handlers/index';
+import { handleTextMessage, handleVoiceMessage, handleDocumentMessage, handlePhotoMessage, handlePollAnswer } from './handlers/index';
 
 // State to track if user is currently entering an API key
 const waitingForApiKey = new Set<number>();
@@ -70,6 +70,16 @@ export async function startBot(token: string) {
     await handleDocumentMessage(bot, msg);
   });
   
+  bot.on('photo', async (msg) => {
+    if (msg.from) {
+      const { redisCache } = await import('../lib/redis');
+      const rateLimitKey = `rate_limit_tg_${msg.from.id}`;
+      const count = await redisCache.incrementRateLimit(rateLimitKey, 30);
+      if (count > 10) return;
+    }
+    await handlePhotoMessage(bot, msg);
+  });
+  
   bot.on('poll_answer', async (pollAnswer) => {
     await handlePollAnswer(bot, pollAnswer);
   });
@@ -103,21 +113,26 @@ export async function startBot(token: string) {
 
     if (query.data && query.data.startsWith('topic_')) {
       const topicId = query.data.replace('topic_', '');
-      await bot.answerCallbackQuery(query.id, { text: 'Loading history...' });
       
-      const { getChatHistory } = await import('../db/index');
-      const history = await getChatHistory(query.from.id, 10, topicId);
+      const { getChatHistory, setActiveTopic } = await import('../db/index');
+      
+      // If it's from the session expired message (or from history), we want to let them continue
+      // Let's set it as the active topic.
+      await setActiveTopic(query.from.id, topicId);
+      
+      await bot.answerCallbackQuery(query.id, { text: 'Topic loaded. You can continue chatting!' });
+      
+      const history = await getChatHistory(query.from.id, 5, topicId);
       
       if (history.length === 0) {
-        await bot.sendMessage(query.message!.chat.id, 'No messages found for this topic.');
+        await bot.sendMessage(query.message!.chat.id, '✅ Conversation restored. You can continue chatting now.');
         return;
       }
       
-      let historyText = `📜 <b>History for Topic</b>\n\n`;
+      let historyText = `✅ <b>Conversation Restored!</b>\nHere are the last few messages:\n\n`;
       history.reverse().forEach(msg => {
         const role = msg.role === 'user' ? '👤 <b>You:</b>' : '🤖 <b>Hugging Face:</b>';
-        // Truncate long messages for display
-        const content = msg.content.length > 200 ? msg.content.substring(0, 200) + '...' : msg.content;
+        const content = msg.content.length > 100 ? msg.content.substring(0, 100) + '...' : msg.content;
         historyText += `${role} ${content}\n\n`;
       });
       

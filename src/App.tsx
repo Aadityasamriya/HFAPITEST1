@@ -40,50 +40,21 @@ interface UserData {
   hfApiKey?: string;
 }
 
-// Subcomponents for Empty State Bento Box
-const FileItem = ({ icon, title, bg, color, IconComponent }: any) => (
-  <div className="flex items-center gap-3 py-1 group cursor-pointer">
-    <div className={cn("w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold shrink-0", bg, color)}>
-      {IconComponent ? <IconComponent className="w-3.5 h-3.5" /> : icon}
-    </div>
-    <span className="text-sm font-medium text-neutral-700 group-hover:text-black transition-colors truncate">{title}</span>
-  </div>
-);
 
-const TaskItem = ({ title, time, isMeeting, status, badge, badgeColor, dotColor }: any) => (
-  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-2.5 border-b border-neutral-100 last:border-0 group cursor-pointer">
-    <div className="flex items-center gap-3 min-w-0">
-      <div className={cn("w-2 h-2 rounded-full shrink-0", dotColor || "bg-blue-500")}></div>
-      <span className="text-sm font-medium text-neutral-800 truncate">{title}</span>
-    </div>
-    <div className="flex items-center gap-2 pl-5 sm:pl-0 shrink-0">
-      {time && <span className="text-xs text-neutral-500 flex items-center gap-1 font-medium"><Clock className="w-3.5 h-3.5" /> {time}</span>}
-      {isMeeting && (
-        <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md flex items-center gap-1.5 transition-colors hover:bg-blue-100">
-          <Globe className="w-3.5 h-3.5" /> Join now
-        </span>
-      )}
-      {status && (
-        <span className="text-[11px] font-semibold text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-md flex items-center gap-1.5">
-          {status === 'In progress' ? <Loader2 className="w-3.5 h-3.5" /> : <div className="w-1.5 h-1.5 border-2 border-neutral-400 rounded-full" />}
-          {status}
-        </span>
-      )}
-      {badge && (
-        <span className={cn("text-[11px] font-semibold px-2.5 py-1 rounded-md flex items-center gap-1.5", badgeColor)}>
-          {badge.includes('Urgent') && <FileWarning className="w-3 h-3" />}
-          {badge.includes('tomorrow') && <ArrowRight className="w-3 h-3" />}
-          {badge}
-        </span>
-      )}
-    </div>
-  </div>
-);
-
-const InputAccessory = () => {
+const InputAccessory = ({ onUpload }: { onUpload: (file: File) => void }) => {
   const [open, setOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      onUpload(e.target.files[0]);
+      setOpen(false);
+    }
+  };
+
   return (
     <div className="relative">
+      <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
       <AnimatePresence>
         {open && (
            <motion.div 
@@ -93,16 +64,8 @@ const InputAccessory = () => {
              transition={{ duration: 0.15 }}
              className="absolute bottom-full left-0 mb-3 bg-white border border-neutral-200 shadow-xl rounded-2xl flex items-center gap-1 p-1.5 z-50 overflow-hidden"
            >
-             <button onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 hover:bg-neutral-100 active:bg-neutral-200 rounded-xl text-sm font-medium text-neutral-700 whitespace-nowrap transition-colors">
-               <Sparkles className="w-4 h-4 text-purple-500" /> Select sources
-             </button>
-             <div className="w-px h-4 bg-neutral-200 mx-1"></div>
-             <button onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 hover:bg-neutral-100 active:bg-neutral-200 rounded-xl text-sm font-medium text-neutral-700 whitespace-nowrap transition-colors">
-               <Folder className="w-4 h-4 text-amber-500" /> Upload Files
-             </button>
-             <div className="w-px h-4 bg-neutral-200 mx-1"></div>
-             <button onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 hover:bg-neutral-100 active:bg-neutral-200 rounded-xl text-sm font-medium text-neutral-700 whitespace-nowrap transition-colors">
-               <Globe className="w-4 h-4 text-emerald-500" /> Search Web
+             <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 hover:bg-neutral-100 active:bg-neutral-200 rounded-xl text-sm font-medium text-neutral-700 whitespace-nowrap transition-colors">
+               <Folder className="w-4 h-4 text-amber-500" /> Upload File
              </button>
              <button onClick={() => setOpen(false)} className="p-2 text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 rounded-xl ml-1 transition-colors">
                <X className="w-4 h-4" />
@@ -134,10 +97,12 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [currentTopicId, setCurrentTopicId] = useState<string>('');
   
+  const [attachment, setAttachment] = useState<{name: string, type: string, data: string} | null>(null);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   
@@ -183,6 +148,13 @@ export default function App() {
       })
       .catch(err => console.error('MiniApp login failed:', err))
       .finally(() => setAuthLoading(false));
+    } else {
+      // Auto login as anonymous user for web
+      const randomId = `anon_${Math.random().toString(36).substring(2, 9)}`;
+      const anonUser = { id: randomId, telegram_id: randomId, name: 'Guest User' };
+      setUser(anonUser);
+      localStorage.setItem('hfapi_user', JSON.stringify(anonUser));
+      loadTopics(randomId);
     }
   }, []);
 
@@ -247,13 +219,21 @@ export default function App() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !user || !user.hfApiKey) return;
+    if ((!input.trim() && !attachment) || !user || !user.hfApiKey) return;
 
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: input.trim() };
+    let displayContent = input.trim();
+    if (attachment) {
+      displayContent = `[Attached: ${attachment.name}]\n` + displayContent;
+    }
+
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: displayContent };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
+    const currentAttachment = attachment;
+    setAttachment(null);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setIsLoading(true);
+    setStatusMessage('🤔 Thinking...');
 
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }));
@@ -262,25 +242,67 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          message: userMsg.content,  history,  hfApiKey: user.hfApiKey, 
-          userName: user.name, userId: user.telegram_id, topicId: currentTopicId || `topic_${Date.now()}`
+          message: input.trim() || "What is in this file?",  
+          history,  
+          hfApiKey: user.hfApiKey, 
+          userName: user.name, 
+          userId: user.telegram_id, 
+          topicId: currentTopicId || `topic_${Date.now()}`,
+          attachment: currentAttachment
         })
       });
 
-      const data = await res.json();
-      
-      if (data.error) {
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `❌ Error: ${data.error}` }]);
+      if (res.headers.get('content-type')?.includes('text/event-stream')) {
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        
+        while (reader) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+          
+          for (const part of parts) {
+            if (part.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(part.slice(6));
+                if (data.type === 'status') {
+                  setStatusMessage(data.status);
+                } else if (data.type === 'done') {
+                  const result = data.result;
+                  const images = result.actions?.filter((a: any) => a.type === 'image').map((a: any) => a.url) || [];
+                  const otherActions = result.actions?.filter((a: any) => a.type !== 'image') || [];
+                  
+                  setMessages(prev => [...prev, { 
+                    id: Date.now().toString(), role: 'assistant', content: result.response,
+                    images: images.length > 0 ? images : undefined, actions: otherActions.length > 0 ? otherActions : undefined
+                  }]);
+                  
+                  if (messages.length === 1) loadTopics(user.telegram_id);
+                }
+              } catch (e) {}
+            }
+          }
+        }
       } else {
-        const images = data.actions?.filter((a: any) => a.type === 'image').map((a: any) => a.url) || [];
-        const otherActions = data.actions?.filter((a: any) => a.type !== 'image') || [];
+        const data = await res.json();
         
-        setMessages(prev => [...prev, { 
-          id: Date.now().toString(), role: 'assistant', content: data.response,
-          images: images.length > 0 ? images : undefined, actions: otherActions.length > 0 ? otherActions : undefined
-        }]);
-        
-        if (messages.length === 1) loadTopics(user.telegram_id);
+        if (data.error) {
+          setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `❌ Error: ${data.error}` }]);
+        } else {
+          const images = data.actions?.filter((a: any) => a.type === 'image').map((a: any) => a.url) || [];
+          const otherActions = data.actions?.filter((a: any) => a.type !== 'image') || [];
+          
+          setMessages(prev => [...prev, { 
+            id: Date.now().toString(), role: 'assistant', content: data.response,
+            images: images.length > 0 ? images : undefined, actions: otherActions.length > 0 ? otherActions : undefined
+          }]);
+          
+          if (messages.length === 1) loadTopics(user.telegram_id);
+        }
       }
     } catch (error) {
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: '❌ Connection error. Please try again.' }]);
@@ -299,81 +321,8 @@ export default function App() {
   // ---------------- AUTH SCREEN ----------------
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] text-neutral-900 flex flex-col items-center justify-center p-4 font-sans">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-white rounded-3xl shadow-[0_8px_40px_rgba(0,0,0,0.06)] border border-neutral-100 overflow-hidden relative"
-        >
-          <div className="p-10 text-center w-full relative">
-            <div className="mx-auto mb-8 relative flex justify-center items-center">
-              <div className="relative w-24 h-24 bg-white rounded-full shadow-lg border border-neutral-100 p-2 flex items-center justify-center overflow-hidden">
-                <HuggingFaceLogo className="w-16 h-16 drop-shadow-sm" />
-              </div>
-            </div>
-            <h1 className="text-3xl font-display font-bold tracking-tight text-neutral-800 mb-2">Hugging Face</h1>
-            <p className="text-neutral-500 text-sm font-medium tracking-wide">Secure Login via Telegram OAuth2</p>
-          </div>
-
-          <div className="px-8 pb-10 flex flex-col items-center">
-            <div className="w-full p-5 bg-blue-50/50 rounded-2xl border border-blue-100/50 mb-6 text-center">
-               <h3 className="text-blue-900 font-semibold mb-2">Telegram Mini App</h3>
-               <p className="text-blue-700/80 text-sm leading-relaxed">
-                 This interface is designed to run seamlessly inside Telegram. Please open the bot and launch the App to automatically log in.
-               </p>
-               <a 
-                 href="https://t.me/"
-                 target="_blank"
-                 rel="noreferrer"
-                 className="inline-block mt-4 px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
-                 onClick={(e) => {
-                   e.preventDefault();
-                   alert('Please launch the Mini App from your Telegram Bot directly.');
-                 }}
-               >
-                 Launch via Telegram
-               </a>
-            </div>
-            
-            <div className="w-full text-left">
-             <div className="flex items-center justify-between mb-3">
-               <label className="text-sm font-semibold text-neutral-700">Developer / Manual Login (API Key)</label>
-             </div>
-             <div className="relative mb-3">
-               <input 
-                 type="password" value={authApiKey}
-                 onChange={e => setAuthApiKey(e.target.value)}
-                 placeholder="hf_..."
-                 className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 text-neutral-900 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
-               />
-             </div>
-             {authError && (
-               <div className="p-3 bg-rose-50 text-rose-600 text-sm rounded-xl border border-rose-100 font-medium mb-3">
-                 {authError}
-               </div>
-             )}
-             <button 
-               onClick={async () => {
-                 if (!authApiKey.trim()) return;
-                 setAuthLoading(true);
-                 setAuthError('');
-                 try {
-                   // A generic endpoint to login with an API key if the user is developer
-                   // We don't have this endpoint, but we could mock a login or just show error.
-                   setAuthError('Manual web login requires Telegram Mini App initData currently.');
-                 } catch(e: any) {
-                   setAuthError(e.message || 'Network error');
-                 } finally {
-                   setAuthLoading(false);
-                 }
-               }}
-               disabled={authLoading || !authApiKey.trim()}
-               className="w-full py-3.5 bg-neutral-900 hover:bg-neutral-800 text-white font-semibold rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-70 active:scale-[0.98]"
-             >
-               {authLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log In Manually'}
-             </button>
-            </div>
-          </div>
-        </motion.div>
+      <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4">
+         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
       </div>
     );
   }
@@ -447,6 +396,15 @@ export default function App() {
   }
 
   // ---------------- MAIN APP UI ----------------
+  const handleFileUpload = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = e.target?.result as string;
+      setAttachment({ name: file.name, type: file.type || 'application/octet-stream', data });
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="flex h-[100dvh] bg-[#F7F7F9] text-neutral-900 font-sans overflow-hidden">
       
@@ -491,18 +449,6 @@ export default function App() {
              <div className="flex items-center gap-3"><MessageSquare className="w-[18px] h-[18px] text-neutral-400" /> New Chat</div>
              <Plus className="w-4 h-4 text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity" />
            </button>
-           <button className="w-full flex items-center justify-between px-3 py-2.5 text-neutral-600 hover:bg-black/5 rounded-xl font-medium text-sm transition-all">
-             <div className="flex items-center gap-3"><CheckSquare className="w-[18px] h-[18px] text-neutral-400" /> My Tasks</div>
-           </button>
-           <button className="w-full flex items-center justify-between px-3 py-2.5 text-neutral-600 hover:bg-black/5 rounded-xl font-medium text-sm transition-all">
-             <div className="flex items-center gap-3"><Calendar className="w-[18px] h-[18px] text-neutral-400" /> My Meetings</div>
-           </button>
-           <button className="w-full flex items-center justify-between px-3 py-2.5 text-neutral-600 hover:bg-black/5 rounded-xl font-medium text-sm transition-all">
-             <div className="flex items-center gap-3"><Folder className="w-[18px] h-[18px] text-neutral-400" /> Saved Files</div>
-           </button>
-           <button className="w-full flex items-center justify-between px-3 py-2.5 text-neutral-600 hover:bg-black/5 rounded-xl font-medium text-sm transition-all">
-             <div className="flex items-center gap-3"><Users className="w-[18px] h-[18px] text-neutral-400" /> Shared with me</div>
-           </button>
         </div>
 
         {/* History Nav */}
@@ -519,22 +465,8 @@ export default function App() {
            )}
         </div>
 
-        {/* Upgrade Card & Settings */}
+        {/* Settings */}
         <div className="p-4 mt-auto">
-           <div className="bg-white rounded-2xl p-4 border border-blue-100/50 shadow-sm text-center mb-4 relative overflow-hidden group hover:shadow-md transition-all cursor-pointer">
-              <div className="absolute inset-0 bg-gradient-to-tr from-blue-50 to-indigo-50 opacity-50"></div>
-              <div className="relative z-10 font-sans">
-                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center mx-auto mb-2 text-blue-600 border border-blue-100">
-                   <HuggingFaceLogo className="w-5 h-5 drop-shadow-sm" />
-                </div>
-                <h4 className="font-bold text-neutral-800 text-[13px] mb-0.5">Only 5 AI reports left</h4>
-                <p className="text-[11px] font-medium text-neutral-500 mb-3">Get deeper insights with Pro</p>
-                <button className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-colors shadow-sm active:scale-95">
-                  Upgrade Now
-                </button>
-              </div>
-           </div>
-           
            <button onClick={handleLogout} className="flex items-center justify-between w-full px-3 py-2.5 text-neutral-500 hover:text-neutral-800 hover:bg-black/5 rounded-xl transition-colors font-medium text-sm">
               <div className="flex items-center gap-3"><Settings className="w-[18px] h-[18px]" /> Settings</div>
            </button>
@@ -559,94 +491,31 @@ export default function App() {
         <div className="flex-1 overflow-y-auto px-4 md:px-12 xl:px-24 pb-48 custom-scrollbar scroll-smooth relative z-10 w-full h-full">
            
           {messages.length === 0 ? (
-            // Bento Box Empty State -> EXACT Layout from Video
-            <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} className="w-full max-w-[900px] mx-auto pt-10 md:pt-20 pb-10">
-              <div className="mb-12 pl-2 text-center md:text-left">
-                <h1 className="text-4xl md:text-[3.25rem] font-display font-medium tracking-tight text-neutral-800 mb-2 leading-tight">
-                  Welcome, {user?.name ? user.name.split(' ')[0] : 'Sam'}! <span className="inline-block animate-wave text-[0.8em]">👋</span>
-                </h1>
-                <h2 className="text-2xl md:text-[2rem] font-display text-neutral-400 tracking-tight font-normal">
-                  How can I help you today?
-                </h2>
+            <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} className="w-full max-w-[800px] mx-auto pt-10 md:pt-20 pb-10 flex flex-col items-center justify-center text-center h-full">
+              <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6 shadow-sm border border-blue-100">
+                <HuggingFaceLogo className="w-10 h-10 drop-shadow-sm" />
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 w-full">
-                
-                {/* Previously viewed files */}
-                <div onClick={() => setInput("Summarize my recently viewed files.")} className="md:col-span-7 bg-[#F9FAFB] rounded-[2rem] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)] border border-neutral-200/50 hover:shadow-md hover:border-neutral-200 transition-all cursor-pointer group">
-                  <div className="flex items-center gap-2 text-neutral-500 mb-6 font-semibold text-sm tracking-wide">
-                    <History className="w-4 h-4" />
-                    Previously viewed files
+              <h1 className="text-4xl md:text-5xl font-display font-medium tracking-tight text-neutral-800 mb-4 leading-tight">
+                Welcome to your AI Agent
+              </h1>
+              <p className="text-lg text-neutral-500 font-medium max-w-lg mb-8">
+                I can process documents, images, and text. Upload any file or ask a question to get started.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
+                <button onClick={() => setInput("What can you do?")} className="p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-blue-300 hover:shadow-md transition-all group">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:scale-110 transition-transform"><Sparkles className="w-4 h-4" /></div>
+                    <h3 className="font-semibold text-neutral-800">Capabilities</h3>
                   </div>
-                  <div className="space-y-4">
-                     <FileItem color="text-yellow-700" bg="bg-yellow-100" icon="M" title="Miro - Product Analytics and Statistics" />
-                     <FileItem color="text-rose-700" bg="bg-rose-100" icon="F" title="Figma - UX Research" />
-                     <FileItem color="text-red-700" bg="bg-red-100" icon="PDF" title="R2 Strategic Goals & Objectives.pdf" />
+                  <p className="text-sm text-neutral-500 font-medium">Ask about what this agent can help you with.</p>
+                </button>
+                <button onClick={() => setInput("Summarize my recent conversations.")} className="p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-blue-300 hover:shadow-md transition-all group">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg group-hover:scale-110 transition-transform"><History className="w-4 h-4" /></div>
+                    <h3 className="font-semibold text-neutral-800">Memory</h3>
                   </div>
-                </div>
-
-                {/* Summarize your last meeting */}
-                <div onClick={() => setInput("Summarize the UX Strategy Meet up from April 1st.")} className="md:col-span-5 bg-[#F9FAFB] rounded-[2rem] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)] border border-neutral-200/50 hover:shadow-md hover:border-neutral-200 transition-all cursor-pointer flex flex-col group">
-                  <div className="flex items-center gap-2 text-neutral-500 mb-6 font-semibold text-sm tracking-wide">
-                    <Sparkles className="w-4 h-4" />
-                    Summarize your last meeting
-                  </div>
-                  <div className="flex items-center gap-4 mt-auto shadow-sm bg-white p-3 rounded-2xl border border-neutral-100 group-hover:scale-[1.02] transition-transform">
-                    <div className="w-12 h-12 rounded-xl bg-neutral-100 overflow-hidden shrink-0">
-                       <img src="https://images.unsplash.com/photo-1543269664-56d74c65a35?q=80&w=256&auto=format&fit=crop" alt="Meeting" className="w-full h-full object-cover" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-neutral-800 text-[15px] mb-0.5">UX Strategy Meet up</h3>
-                      <p className="text-xs font-medium text-neutral-500">1 Apr 2025, 14:00 pm</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Suggested Task 1 & 2 */}
-                <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-2 gap-5">
-                   <div onClick={() => setInput("Conduct UX Research")} className="flex-1 bg-[#F9FAFB] rounded-[2rem] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)] border border-neutral-200/50 flex flex-col justify-center cursor-pointer hover:shadow-md hover:border-neutral-200 transition-all group min-h-[140px]">
-                      <div className="text-[13px] font-semibold text-neutral-500 mb-3 flex items-center gap-2">
-                         <div className="bg-white p-1 rounded-md shadow-sm border border-neutral-100"><FileText className="w-3.5 h-3.5" /></div> Suggested Task
-                      </div>
-                      <div className="text-[22px] font-display font-semibold text-neutral-800 tracking-tight group-hover:text-blue-600 transition-colors">Conduct UX Research</div>
-                   </div>
-                   
-                   <div onClick={() => setInput("Write a prospect email")} className="flex-1 bg-[#F9FAFB] rounded-[2rem] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)] border border-neutral-200/50 flex flex-col justify-center cursor-pointer hover:shadow-md hover:border-neutral-200 transition-all group min-h-[140px]">
-                      <div className="text-[13px] font-semibold text-neutral-500 mb-3 flex items-center gap-2">
-                         <div className="bg-white p-1 rounded-md shadow-sm border border-neutral-100"><FileText className="w-3.5 h-3.5" /></div> Suggested Task
-                      </div>
-                      <div className="text-[22px] font-display font-semibold text-neutral-800 tracking-tight group-hover:text-blue-600 transition-colors">Write a prospect email</div>
-                   </div>
-                </div>
-
-                {/* My Tasks */}
-                <div className="md:col-span-12 bg-white rounded-[2rem] p-6 md:p-8 shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-neutral-200/80">
-                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-2 font-display font-semibold text-[17px] text-neutral-800">
-                          <CheckSquare className="w-[18px] h-[18px] text-neutral-400" />
-                          My Tasks <span className="bg-neutral-100 text-neutral-600 text-[11px] px-2 py-0.5 rounded-full font-bold ml-0.5">13</span>
-                        </div>
-                        <div className="hidden md:block h-5 w-px bg-neutral-200 mx-1"></div>
-                        <div className="flex items-center gap-2 bg-[#F9FAFB] px-3 py-1.5 rounded-full text-sm text-neutral-500 border border-neutral-200 w-full md:w-auto focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-                           <Search className="w-4 h-4 text-neutral-400" />
-                           <input type="text" placeholder="Search for name..." className="bg-transparent outline-none w-full md:w-40 placeholder:text-neutral-400 font-medium" />
-                        </div>
-                        <button className="hidden md:flex w-8 h-8 rounded-full bg-[#F9FAFB] border border-neutral-200 items-center justify-center text-neutral-500 hover:bg-neutral-100 transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.05)]"><Plus className="w-4 h-4" /></button>
-                      </div>
-                      <button className="flex items-center justify-center gap-2 bg-gradient-to-tr from-pink-50 to-purple-50 text-purple-700 px-4 py-2 rounded-full text-sm font-semibold hover:shadow-sm border border-purple-100 transition-all active:scale-95">
-                        <Sparkles className="w-4 h-4" /> Prioritize Tasks
-                      </button>
-                   </div>
-                   
-                   <div className="space-y-1">
-                      <TaskItem title="Design Meeting" time="2 pm" isMeeting badgeColor="text-rose-600 bg-rose-50 border-rose-100" dotColor="bg-rose-500" />
-                      <TaskItem title="Refine UI components based on user feedback" status="In progress" badge="Urgent" badgeColor="text-rose-600 bg-rose-50 border border-rose-100" dotColor="bg-blue-500" />
-                      <TaskItem title="Prepare a prototype for usability testing" badge="By today" badgeColor="text-rose-600 bg-rose-50 border border-rose-100" dotColor="bg-blue-500" />
-                      <TaskItem title="Collaborate with developers on implementation detail" status="To do" badge="By tomorrow" badgeColor="text-emerald-700 bg-emerald-50 border border-emerald-100" dotColor="bg-neutral-300" />
-                   </div>
-                </div>
-
+                  <p className="text-sm text-neutral-500 font-medium">Access your personal conversation history and summaries.</p>
+                </button>
               </div>
             </motion.div>
           ) : (
@@ -681,15 +550,21 @@ export default function App() {
                           : "bg-white text-neutral-800 rounded-[1.5rem] rounded-tl-[4px] border border-neutral-200/80"
                       )}>
                         
-                        {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
+                         {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
                           <div className="mb-4 space-y-2">
                              {msg.actions.map((action, i) => (
-                               <div key={i} className="inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-semibold text-neutral-600 shadow-sm">
-                                 {action.type === 'message' && (
+                               <div key={i} className="inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-semibold text-neutral-600 shadow-sm mr-2">
+                                 {action.type === 'message' && !action.url && (
                                    <span className="flex items-center gap-2">
                                      {action.text?.includes('Generating') ? <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" /> : <Sparkles className="w-3.5 h-3.5 text-blue-500" />}
                                      {action.text}
                                    </span>
+                                 )}
+                                 {action.type === 'message' && action.url && (
+                                   <a href={action.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 hover:text-blue-700">
+                                     <Globe className="w-3.5 h-3.5" />
+                                     {action.text}
+                                   </a>
                                  )}
                                </div>
                              ))}
@@ -739,10 +614,13 @@ export default function App() {
                     <div className="w-8 h-8 shrink-0 rounded-full bg-white border border-neutral-200 shadow-sm flex items-center justify-center mt-1 z-10">
                       <HuggingFaceLogo className="w-5 h-5 opacity-80" />
                     </div>
-                    <div className="bg-white border border-neutral-200/80 shadow-[0_2px_10px_rgba(0,0,0,0.03)] px-5 py-4 rounded-[1.5rem] rounded-tl-[4px] flex items-center gap-2">
-                      <div className="w-2 h-2 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-2 h-2 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                      <div className="w-2 h-2 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    <div className="bg-white border border-neutral-200/80 shadow-[0_2px_10px_rgba(0,0,0,0.03)] px-5 py-4 rounded-[1.5rem] rounded-tl-[4px] flex items-center gap-3">
+                      <div className="flex gap-1">
+                        <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
+                      <span className="text-sm font-medium text-neutral-600 animate-pulse">{statusMessage}</span>
                     </div>
                   </motion.div>
                )}
@@ -756,7 +634,16 @@ export default function App() {
         <div className="absolute bottom-0 inset-x-0 pb-6 pt-12 px-4 w-full z-30 bg-gradient-to-t from-white via-white/95 to-transparent pointer-events-none flex flex-col items-center justify-end">
           
           <div className="w-full max-w-[850px] pointer-events-auto bg-white rounded-full border border-neutral-200 shadow-[0_8px_30px_-5px_rgba(0,0,0,0.1)] p-2 flex items-center gap-3 transition-all focus-within:shadow-[0_15px_40px_-5px_rgba(0,0,0,0.15)] focus-within:border-neutral-300">
-            <InputAccessory />
+            <InputAccessory onUpload={handleFileUpload} />
+            {attachment && (
+              <div className="absolute bottom-[110%] left-6 bg-white border border-neutral-200 shadow-md rounded-xl px-3 py-1.5 flex items-center gap-2 text-sm">
+                <FileText className="w-4 h-4 text-blue-500" />
+                <span className="max-w-[150px] truncate font-medium">{attachment.name}</span>
+                <button onClick={() => setAttachment(null)} className="ml-1 text-neutral-400 hover:text-red-500">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
             <textarea
               ref={textareaRef}
               value={input}

@@ -73,22 +73,47 @@ export async function withContinuousAction<T>(bot: TelegramBot, chatId: number |
   }
 }
 
-// Helper to parse AI response for UI elements (Buttons, Polls) and send them
-export async function processAndSendAiResponse(bot: TelegramBot, chatId: number | string, aiResponse: string, userId?: string | number, topicId?: string) {
+// Helper to parse AI response for UI elements (Buttons, Polls, Voice, etc.) and send them
+export async function processAndSendAiResponse(bot: TelegramBot, chatId: number | string, aiResponse: string, userId?: string | number, topicId?: string, ai?: any) {
   let cleanResponse = aiResponse;
   const inlineKeyboard: TelegramBot.InlineKeyboardButton[][] = [];
   const polls: { question: string, options: string[] }[] = [];
+  const voices: string[] = [];
+  const dice: string[] = [];
+  let embedUrl: string | undefined = undefined;
+
+  // Extract EMBED: [EMBED: url]
+  const embedRegex = /\[EMBED:\s*(https?:\/\/[^\s\]]+)\s*\]/gi;
+  let match;
+  while ((match = embedRegex.exec(cleanResponse)) !== null) {
+    embedUrl = match[1].trim();
+    cleanResponse = cleanResponse.replace(match[0], '').trim();
+  }
+
+  // Extract VOICE: [VOICE: text]
+  const voiceRegex = /\[VOICE:\s*(.+?)\]/gi;
+  while ((match = voiceRegex.exec(cleanResponse)) !== null) {
+    voices.push(match[1].trim());
+    cleanResponse = cleanResponse.replace(match[0], '').trim();
+  }
+
+  // Extract DICE: [DICE: emoji] (emoji can be 🎲, 🎯, 🏀, ⚽, 🎳, or 🎰)
+  const diceRegex = /\[DICE:\s*(.+?)\]/gi;
+  while ((match = diceRegex.exec(cleanResponse)) !== null) {
+    dice.push(match[1].trim());
+    cleanResponse = cleanResponse.replace(match[0], '').trim();
+  }
 
   // Extract buttons: [BUTTON: Text -> URL]
-  const buttonRegex = /\[BUTTON:\s*(.+?)\s*->\s*(https?:\/\/[^\s\]]+)\s*\]/g;
-  let match;
+  const buttonRegex = /\[BUTTON:\s*(.+?)\s*->\s*(https?:\/\/[^\s\]]+)\s*\]/gi;
   while ((match = buttonRegex.exec(cleanResponse)) !== null) {
-    inlineKeyboard.push([{ text: match[1].trim(), url: match[2].trim() }]);
+    const btnText = match[1].trim().replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    inlineKeyboard.push([{ text: btnText, url: match[2].trim() }]);
     cleanResponse = cleanResponse.replace(match[0], '').trim();
   }
 
   // Extract polls: [POLL: Question -> Opt1 | Opt2]
-  const pollRegex = /\[POLL:\s*(.+?)\s*->\s*(.+?)\]/g;
+  const pollRegex = /\[POLL:\s*(.+?)\s*->\s*(.+?)\]/gi;
   while ((match = pollRegex.exec(cleanResponse)) !== null) {
     const question = match[1].trim();
     const options = match[2].split('|').map(o => o.trim()).filter(o => o.length > 0);
@@ -104,6 +129,11 @@ export async function processAndSendAiResponse(bot: TelegramBot, chatId: number 
     if (inlineKeyboard.length > 0) {
       opts.reply_markup = { inline_keyboard: inlineKeyboard };
     }
+    if (embedUrl) {
+      opts.link_preview_options = { url: embedUrl, is_disabled: false };
+    } else {
+      opts.link_preview_options = { is_disabled: true };
+    }
     await sendSafeHtml(bot, chatId, cleanResponse || 'Here you go!', opts);
   }
 
@@ -113,6 +143,25 @@ export async function processAndSendAiResponse(bot: TelegramBot, chatId: number 
     if (userId && topicId && sentPollMsg.poll) {
        const { savePollMapping } = await import('../../db/index');
        await savePollMapping(userId, sentPollMsg.poll.id, topicId, poll.question, poll.options);
+    }
+  }
+
+  // Send any dice
+  for (const emoji of dice) {
+    if (['🎲', '🎯', '🏀', '⚽', '🎳', '🎰'].includes(emoji)) {
+      await bot.sendDice(chatId, { emoji: emoji as any });
+    }
+  }
+
+  // Process voice Generation (TTS)
+  if (voices.length > 0 && ai) {
+    bot.sendChatAction(chatId, 'record_voice').catch(() => {});
+    try {
+      const voiceBlob = await ai.generateAudio(voices.join('. '));
+      const arrayBuffer = await voiceBlob.arrayBuffer();
+      await bot.sendVoice(chatId, Buffer.from(arrayBuffer));
+    } catch (e) {
+      console.error('TTS error:', e);
     }
   }
 }

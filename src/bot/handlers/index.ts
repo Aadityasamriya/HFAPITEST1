@@ -8,6 +8,27 @@ import path from 'path';
 import AdmZip from 'adm-zip';
 import pdfParse from 'pdf-parse';
 
+const userTimeouts = new Map<number, NodeJS.Timeout>();
+
+function resetSessionTimeout(bot: TelegramBot, chatId: number | string, userId: number, topicId: string) {
+  if (userTimeouts.has(userId)) {
+    clearTimeout(userTimeouts.get(userId));
+  }
+  userTimeouts.set(userId, setTimeout(async () => {
+    try {
+      await bot.sendMessage(chatId, "⚠️ <b>Your session is expired.</b>", {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Continue this chat", callback_data: `topic_${topicId}` }],
+            [{ text: "New chat", callback_data: "action_newchat" }]
+          ]
+        }
+      });
+    } catch (e) {}
+  }, 10 * 60 * 1000));
+}
+
 export async function handlePollAnswer(bot: TelegramBot, pollAnswer: TelegramBot.PollAnswer) {
   try {
     const userId = pollAnswer.user.id;
@@ -31,7 +52,7 @@ export async function handlePollAnswer(bot: TelegramBot, pollAnswer: TelegramBot
     await sendSafeHtml(bot, userId, `<i>Received your vote: ${selectedOptions}. Thinking...</i>`);
     
     const finalResponse = await AgentService.processTelegramMessage(ai, userMessage, user, user.name, bot, userId, 0); // No message ID since it's a poll answer
-    await processAndSendAiResponse(bot, userId, finalResponse, userId, pollMapping.topic_id);
+    await processAndSendAiResponse(bot, userId, finalResponse, userId, pollMapping.topic_id, ai);
     await addMessage(userId, 'assistant', finalResponse, pollMapping.topic_id);
 
   } catch (error) {
@@ -104,6 +125,8 @@ export async function handleTextMessage(
     const ai = new ModelManager(user.hfApiKey);
     const topicId = user.activeTopicId || `topic_${Date.now()}`;
     
+    resetSessionTimeout(bot, chatId, userId, topicId);
+    
     // Check if this is the first message in the topic
     const { getChatHistory, saveTopic } = await import('../../db/index');
     const history = await getChatHistory(userId, 1, topicId);
@@ -112,7 +135,7 @@ export async function handleTextMessage(
     await addMessage(userId, 'user', text, topicId);
 
     const finalResponse = await AgentService.processTelegramMessage(ai, text, user, user.name, bot, chatId, msg.message_id);
-    await processAndSendAiResponse(bot, chatId, finalResponse, userId, topicId);
+    await processAndSendAiResponse(bot, chatId, finalResponse, userId, topicId, ai);
     await addMessage(userId, 'assistant', finalResponse, topicId);
     
     if (isFirstMessage) {
@@ -151,6 +174,8 @@ export async function handleVoiceMessage(bot: TelegramBot, msg: TelegramBot.Mess
   }
 
   const ai = new ModelManager(user.hfApiKey);
+  const topicId = user.activeTopicId || `topic_${Date.now()}`;
+  resetSessionTimeout(bot, chatId, userId, topicId);
 
   try {
     const transcription = await withContinuousAction(bot, chatId, 'typing', async () => {
@@ -165,7 +190,7 @@ export async function handleVoiceMessage(bot: TelegramBot, msg: TelegramBot.Mess
     
     await addMessage(userId, 'user', `[Voice Message Transcription]: ${transcription}`);
     const finalResponse = await AgentService.processTelegramMessage(ai, transcription, user, user.name, bot, chatId, msg.message_id);
-    await processAndSendAiResponse(bot, chatId, finalResponse);
+    await processAndSendAiResponse(bot, chatId, finalResponse, userId, undefined, ai);
     await addMessage(userId, 'assistant', finalResponse);
 
   } catch (error) {
@@ -173,6 +198,48 @@ export async function handleVoiceMessage(bot: TelegramBot, msg: TelegramBot.Mess
     try {
       await sendSafeHtml(bot, chatId, `❌ <b>Failed to process voice message.</b>`);
     } catch(e) {}
+  }
+}
+
+export async function handlePhotoMessage(bot: TelegramBot, msg: TelegramBot.Message) {
+  const chatId = msg.chat.id;
+  const userId = msg.from!.id;
+  
+  try {
+    const user = await getUser(userId, msg.from!.first_name, msg.from!.username);
+
+    if (!user.hfApiKey) {
+      await sendSafeHtml(bot, chatId, `⚠️ <b>API Key Required</b>\nPlease set your API key using /settings before sending photos.`);
+      return;
+    }
+
+    const ai = new ModelManager(user.hfApiKey);
+    const topicId = user.activeTopicId || `topic_${Date.now()}`;
+    resetSessionTimeout(bot, chatId, userId, topicId);
+
+    // Telegram sends multiple sizes; the last one is the largest
+    const photo = msg.photo![msg.photo!.length - 1];
+    
+    try {
+      await withContinuousAction(bot, chatId, 'typing', async () => {
+        const fileLink = await bot.getFileLink(photo.file_id);
+        const response = await fetch(fileLink);
+        const arrayBuffer = await response.arrayBuffer();
+        const blob = new Blob([arrayBuffer], { type: 'image/jpeg' });
+
+        const caption = msg.caption || 'describe this image';
+        const analysis = await ai.analyzeImage(blob, caption);
+        
+        await addMessage(userId, 'user', `[Uploaded Image] ${caption}`);
+        await addMessage(userId, 'assistant', analysis);
+        await processAndSendAiResponse(bot, chatId, analysis, userId, undefined, ai);
+      });
+    } catch (error: any) {
+      console.error('Photo processing error:', error);
+      await sendSafeHtml(bot, chatId, `❌ <b>Failed to process photo.</b>`);
+    }
+  } catch (outerError: any) {
+    await sendSafeHtml(bot, chatId, `❌ <b>Failed to process photo request.</b>`);
   }
 }
 
@@ -189,6 +256,9 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
     }
 
     const ai = new ModelManager(user.hfApiKey);
+    const topicId = user.activeTopicId || `topic_${Date.now()}`;
+    resetSessionTimeout(bot, chatId, userId, topicId);
+    
     const doc = msg.document!;
     const fileSize = doc.file_size || 0;
 
@@ -239,7 +309,7 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
         
         await addMessage(userId, 'user', `[Uploaded File: ${doc.file_name}]`);
         const finalResponse = await AgentService.processTelegramMessage(ai, prompt, user, user.name, bot, chatId, msg.message_id);
-        await processAndSendAiResponse(bot, chatId, finalResponse);
+        await processAndSendAiResponse(bot, chatId, finalResponse, userId, undefined, ai);
         await addMessage(userId, 'assistant', finalResponse);
       });
     } catch (error: any) {
