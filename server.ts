@@ -262,6 +262,37 @@ async function startServer() {
     console.warn('Skipping Telegram bot startup because TELEGRAM_BOT_TOKEN is missing.');
   }
 
+  // --------- TTS ENDPOINT ---------
+  app.post('/api/tts', async (req, res) => {
+    const { text, hfApiKey } = req.body;
+    
+    if (!hfApiKey || !text) {
+      return res.status(400).json({ error: 'HF API key and text are required' });
+    }
+
+    try {
+      const { redisCache } = await import('./src/lib/redis');
+      const rateLimitKey = `rate_limit_tts_${req.ip || 'anonymous'}`;
+      const count = await redisCache.incrementRateLimit(rateLimitKey, 10);
+      
+      if (count > 5) {
+        return res.status(429).json({ error: 'Too many TTS requests. Please wait a moment.' });
+      }
+
+      const { ModelManager } = await import('./src/ai/index');
+      const ai = new ModelManager(hfApiKey);
+      const audioBlob = await ai.generateAudio(text);
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      res.setHeader('Content-Type', 'audio/wav');
+      res.send(buffer);
+    } catch (error: any) {
+      console.error('TTS API Error:', error);
+      res.status(500).json({ error: error.message || 'Failed to generate speech' });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

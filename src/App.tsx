@@ -5,7 +5,8 @@ import {
   Mic, MicOff, Volume2, ArrowUp, Loader2, 
   MessageSquare, FileText, Lock, Globe, Image as ImageIcon,
   MoreHorizontal, ChevronDown, ListTodo, Presentation, PlayCircle,
-  Video, Clock, FileWarning, ArrowRight, History, User
+  Video, Clock, FileWarning, ArrowRight, History, User,
+  CheckCircle2, Circle, UploadCloud
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -21,7 +22,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   images?: string[];
-  actions?: { type: string; text?: string; emoji?: string }[];
+  actions?: { type: string; text?: string; emoji?: string; url?: string }[];
 }
 
 interface Topic {
@@ -40,7 +41,6 @@ interface UserData {
   hfApiKey?: string;
 }
 
-
 const InputAccessory = ({ onUpload }: { onUpload: (file: File) => void }) => {
   const [open, setOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,43 +53,94 @@ const InputAccessory = ({ onUpload }: { onUpload: (file: File) => void }) => {
   };
 
   return (
-    <div className="relative">
+    <>
       <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+      
       <AnimatePresence>
         {open && (
            <motion.div 
-             initial={{opacity: 0, scale: 0.9, y: 10}} 
-             animate={{opacity: 1, scale: 1, y: 0}} 
-             exit={{opacity: 0, scale: 0.9, y: 10}} 
-             transition={{ duration: 0.15 }}
-             className="absolute bottom-full left-0 mb-3 bg-white border border-neutral-200 shadow-xl rounded-2xl flex items-center gap-1 p-1.5 z-50 overflow-hidden"
+             initial={{opacity: 0}} 
+             animate={{opacity: 1}} 
+             exit={{opacity: 0}} 
+             className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4"
+             onClick={() => setOpen(false)}
            >
-             <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 hover:bg-neutral-100 active:bg-neutral-200 rounded-xl text-sm font-medium text-neutral-700 whitespace-nowrap transition-colors">
-               <Folder className="w-4 h-4 text-amber-500" /> Upload File
-             </button>
-             <button onClick={() => setOpen(false)} className="p-2 text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 rounded-xl ml-1 transition-colors">
-               <X className="w-4 h-4" />
-             </button>
+             <motion.div 
+               initial={{scale: 0.95, opacity: 0}}
+               animate={{scale: 1, opacity: 1}}
+               exit={{scale: 0.95, opacity: 0}}
+               onClick={(e) => e.stopPropagation()}
+               className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh]"
+             >
+               <div className="p-4 border-b border-neutral-100 flex items-center gap-3">
+                 <Search className="w-5 h-5 text-neutral-400" />
+                 <input type="text" placeholder="Search for sources to chat with..." className="flex-1 bg-transparent border-none outline-none text-neutral-800 placeholder:text-neutral-400 text-lg" />
+                 <button onClick={() => setOpen(false)} className="p-2 text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 rounded-xl transition-colors">
+                   <X className="w-5 h-5" />
+                 </button>
+               </div>
+               
+               <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-100 overflow-x-auto custom-scrollbar shrink-0">
+                 <button className="px-4 py-1.5 bg-neutral-900 text-white rounded-full text-sm font-medium shrink-0 flex items-center gap-2">
+                   <CheckSquare className="w-4 h-4" /> All
+                 </button>
+                 <button className="px-4 py-1.5 bg-neutral-50 hover:bg-neutral-100 text-neutral-600 rounded-full text-sm font-medium shrink-0 flex items-center gap-2">
+                   <FileText className="w-4 h-4" /> Documents
+                 </button>
+                 <button className="px-4 py-1.5 bg-neutral-50 hover:bg-neutral-100 text-neutral-600 rounded-full text-sm font-medium shrink-0 flex items-center gap-2">
+                   <Folder className="w-4 h-4" /> Reports
+                 </button>
+                 <button className="px-4 py-1.5 bg-neutral-50 hover:bg-neutral-100 text-neutral-600 rounded-full text-sm font-medium shrink-0 flex items-center gap-2">
+                   <ImageIcon className="w-4 h-4" /> Images
+                 </button>
+                 <button className="px-4 py-1.5 bg-neutral-50 hover:bg-neutral-100 text-neutral-600 rounded-full text-sm font-medium shrink-0 flex items-center gap-2">
+                   <Video className="w-4 h-4" /> Video
+                 </button>
+               </div>
+               
+               <div className="flex-1 overflow-y-auto p-6 bg-[#fcfcfd]">
+                 <div className="mb-6">
+                   <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-4">Documents (15)</div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                     <div onClick={() => fileInputRef.current?.click()} className="flex items-start gap-3 p-3 bg-white border border-neutral-200 rounded-2xl hover:border-blue-300 hover:shadow-sm cursor-pointer transition-all">
+                       <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                         <span className="text-red-600 font-bold text-xs">PDF</span>
+                       </div>
+                       <div>
+                         <h4 className="font-semibold text-neutral-800 text-sm">Upload new file...</h4>
+                         <p className="text-xs text-neutral-500 mt-0.5">Click to browse local files</p>
+                       </div>
+                     </div>
+                     <div className="flex items-start gap-3 p-3 bg-white border border-neutral-200 rounded-2xl cursor-pointer hover:border-blue-300 transition-all">
+                       <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                         <span className="text-blue-600 font-bold text-xs">PDF</span>
+                       </div>
+                       <div>
+                         <h4 className="font-semibold text-neutral-800 text-sm">google-certificate.pdf</h4>
+                         <p className="text-xs text-neutral-500 mt-0.5">3.4 MB • 1d ago</p>
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </motion.div>
            </motion.div>
         )}
       </AnimatePresence>
+
       <button 
-        onClick={() => setOpen(!open)} 
-        className={cn(
-          "w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 shadow-[0_2px_10px_rgba(0,0,0,0.08)]",
-          open 
-            ? "bg-neutral-800 text-white rotate-45" 
-            : "bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 text-white hover:opacity-90 hover:scale-105 active:scale-95"
-        )}
+        onClick={() => setOpen(true)} 
+        className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700"
       >
         <Plus className="w-5 h-5" />
       </button>
-    </div>
+    </>
   )
 }
 
 export default function App() {
   const [user, setUser] = useState<UserData | null>(null);
+  const [needsWebLogin, setNeedsWebLogin] = useState(false);
   const [authApiKey, setAuthApiKey] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -104,10 +155,48 @@ export default function App() {
   
   const [attachment, setAttachment] = useState<{name: string, type: string, data: string} | null>(null);
   const [isListening, setIsListening] = useState(false);
+  const [playingAudioMsgId, setPlayingAudioMsgId] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const playTTS = async (messageId: string, text: string) => {
+    if (playingAudioMsgId === messageId) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      setPlayingAudioMsgId(null);
+      return;
+    }
+
+    try {
+      setPlayingAudioMsgId(messageId);
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, hfApiKey: user?.hfApiKey })
+      });
+      if (!res.ok) throw new Error('TTS failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      const audio = new Audio(url);
+      audio.onended = () => {
+        setPlayingAudioMsgId(null);
+        URL.revokeObjectURL(url);
+      };
+      audioRef.current = audio;
+      audio.play();
+    } catch (e) {
+      console.error(e);
+      setPlayingAudioMsgId(null);
+    }
+  };
 
   useEffect(() => {
     const handleResize = () => setSidebarOpen(window.innerWidth >= 768);
@@ -149,12 +238,9 @@ export default function App() {
       .catch(err => console.error('MiniApp login failed:', err))
       .finally(() => setAuthLoading(false));
     } else {
-      // Auto login as anonymous user for web
-      const randomId = `anon_${Math.random().toString(36).substring(2, 9)}`;
-      const anonUser = { id: randomId, telegram_id: randomId, name: 'Guest User' };
-      setUser(anonUser);
-      localStorage.setItem('hfapi_user', JSON.stringify(anonUser));
-      loadTopics(randomId);
+      // Do not auto-login on web. We will show a custom web login screen if user is null.
+      // We set a flag to avoid showing the loading spinner infinitely.
+      setNeedsWebLogin(true);
     }
   }, []);
 
@@ -210,6 +296,54 @@ export default function App() {
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Speech recognition is not supported in this browser.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        }
+      }
+      if (finalTranscript) {
+        setInput(prev => prev + (prev ? ' ' : '') + finalTranscript);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+        }
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error', event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+    setIsListening(true);
+  };
+
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
     if (textareaRef.current) {
@@ -218,10 +352,11 @@ export default function App() {
     }
   };
 
-  const handleSend = async () => {
-    if ((!input.trim() && !attachment) || !user || !user.hfApiKey) return;
+  const handleSend = async (overrideInput?: string) => {
+    const textToSend = overrideInput || input;
+    if ((!textToSend.trim() && !attachment) || !user || !user.hfApiKey) return;
 
-    let displayContent = input.trim();
+    let displayContent = textToSend.trim();
     if (attachment) {
       displayContent = `[Attached: ${attachment.name}]\n` + displayContent;
     }
@@ -242,7 +377,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          message: input.trim() || "What is in this file?",  
+          message: textToSend.trim() || "What is in this file?",  
           history,  
           hfApiKey: user.hfApiKey, 
           userName: user.name, 
@@ -320,6 +455,107 @@ export default function App() {
 
   // ---------------- AUTH SCREEN ----------------
   if (!user) {
+    if (needsWebLogin) {
+      return (
+        <div className="min-h-screen bg-white text-neutral-900 flex flex-col md:flex-row font-sans">
+          <div className="hidden md:flex flex-1 bg-[#1A1A1D] flex-col justify-between p-12 relative overflow-hidden">
+             <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/20 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2"></div>
+             <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500/20 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2"></div>
+             
+             <div className="relative z-10 flex items-center gap-3 text-white">
+                <HuggingFaceLogo className="w-8 h-8" />
+                <span className="text-2xl font-bold font-display">AadityaLabs</span>
+             </div>
+             <div className="relative z-10">
+                <h1 className="text-5xl font-display font-bold text-white leading-tight mb-4">
+                  The Ultimate<br />AI Manager
+                </h1>
+                <p className="text-xl text-neutral-400 max-w-md">Experience the most powerful frontier models integrated perfectly into one seamless workspace.</p>
+             </div>
+          </div>
+          
+          <div className="flex-1 flex flex-col justify-center items-center p-8 relative">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              className="w-full max-w-sm"
+            >
+              <div className="flex items-center justify-center gap-3 text-[#1A1A1D] md:hidden mb-12">
+                <HuggingFaceLogo className="w-8 h-8" />
+                <span className="text-2xl font-bold font-display">AadityaLabs</span>
+              </div>
+              
+              <div className="text-center mb-10">
+                 <h2 className="text-3xl font-bold font-display text-neutral-900 mb-2">Welcome Back</h2>
+                 <p className="text-neutral-500 font-medium">Continue to your personal workspace.</p>
+              </div>
+              
+              <form className="space-y-5" onSubmit={async (e) => {
+                e.preventDefault();
+                const name = (e.target as any).name.value;
+                const apiKey = (e.target as any).apiKey.value;
+                if (!name || !apiKey) return;
+                
+                setAuthLoading(true);
+                setAuthError('');
+                const randomId = `web_${Math.random().toString(36).substring(2, 9)}`;
+                
+                try {
+                  const res = await fetch('/api/web/update-api-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegramId: randomId, apiKey, name })
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    const newUser = { ...data.user, name, id: randomId, telegram_id: randomId };
+                    setUser(newUser);
+                    localStorage.setItem('hfapi_user', JSON.stringify(newUser));
+                    loadTopics(randomId);
+                  } else {
+                    setAuthError(data.error || 'Failed to update API key');
+                  }
+                } catch(err: any) {
+                  setAuthError(err.message || 'Network error');
+                } finally {
+                  setAuthLoading(false);
+                }
+              }}>
+                 <div>
+                   <label className="block text-sm font-semibold text-neutral-700 mb-2">Your Name</label>
+                   <input 
+                     name="name" type="text" placeholder="John Doe" required
+                     className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 text-neutral-900 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-medium placeholder:font-normal"
+                   />
+                 </div>
+                 <div>
+                   <label className="block text-sm font-semibold text-neutral-700 mb-2">Hugging Face API Key</label>
+                   <input 
+                     name="apiKey" type="password" placeholder="hf_..." required
+                     className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 text-neutral-900 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-medium placeholder:font-normal"
+                   />
+                   <p className="text-xs text-neutral-400 mt-2 font-medium"><a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Get your API key here</a></p>
+                 </div>
+                 
+                 {authError && (
+                   <div className="p-3 bg-rose-50 text-rose-600 text-sm rounded-xl border border-rose-100 font-medium text-center">
+                     {authError}
+                   </div>
+                 )}
+                 
+                 <button 
+                   type="submit"
+                   disabled={authLoading}
+                   className="w-full py-3.5 bg-[#1A1A1D] hover:bg-black text-white font-semibold rounded-2xl shadow-[0_4px_14px_0_rgba(0,0,0,0.1)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] transition-all flex items-center justify-center gap-2 disabled:opacity-70 active:scale-[0.98]"
+                 >
+                   {authLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Continue to Workspace'}
+                 </button>
+              </form>
+            </motion.div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4">
          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
@@ -427,7 +663,7 @@ export default function App() {
         )}
       >
         {/* User Profile Header */}
-        <div className="p-5 pb-3">
+        <div className="p-5 pb-4">
            <div className="flex items-center justify-between group">
               <div className="flex items-center gap-3 cursor-pointer">
                 <div className="w-8 h-8 rounded-full overflow-hidden bg-white border border-neutral-200 shadow-sm flex items-center justify-center">
@@ -441,22 +677,44 @@ export default function App() {
         </div>
 
         {/* Primary Nav */}
-        <div className="px-3 py-2 space-y-0.5">
-           <button onClick={startNewChat} className="w-full flex items-center justify-between px-3 py-2.5 bg-white text-neutral-900 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-neutral-200/60 font-medium text-sm transition-all group">
-             <div className="flex items-center gap-3"><Home className="w-[18px] h-[18px] text-neutral-500" /> Home</div>
+        <div className="px-3 py-2 space-y-1">
+           <button onClick={startNewChat} className="w-full flex items-center justify-between px-3 py-2 bg-blue-50 text-blue-700 rounded-xl font-semibold text-sm transition-all group">
+             <div className="flex items-center gap-3"><Home className="w-[18px] h-[18px] text-blue-600" /> Home</div>
            </button>
-           <button onClick={startNewChat} className="w-full flex items-center justify-between px-3 py-2.5 text-neutral-600 hover:bg-black/5 rounded-xl font-medium text-sm transition-all group">
-             <div className="flex items-center gap-3"><MessageSquare className="w-[18px] h-[18px] text-neutral-400" /> New Chat</div>
-             <Plus className="w-4 h-4 text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+           <button onClick={startNewChat} className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
+             <div className="flex items-center gap-3"><MessageSquare className="w-[18px] h-[18px]" /> New Chat</div>
+             <Plus className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+           </button>
+           <button className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
+             <div className="flex items-center gap-3"><CheckSquare className="w-[18px] h-[18px]" /> My Tasks</div>
+           </button>
+           <button className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
+             <div className="flex items-center gap-3"><Calendar className="w-[18px] h-[18px]" /> My Meetings</div>
+           </button>
+           <button className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
+             <div className="flex items-center gap-3"><Folder className="w-[18px] h-[18px]" /> Saved Files</div>
+           </button>
+           <button className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
+             <div className="flex items-center gap-3"><Users className="w-[18px] h-[18px]" /> Shared with me</div>
            </button>
         </div>
 
         {/* History Nav */}
-        <div className="flex-1 overflow-y-auto px-3 mt-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto px-3 mt-6 custom-scrollbar space-y-6">
            {topics.length > 0 && (
-             <div className="mb-4">
+             <div>
                  <div className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider px-3 mb-2">Today</div>
-                 {topics.slice(0, 5).map(topic => (
+                 {topics.slice(0, 3).map(topic => (
+                    <button key={topic._id} onClick={() => loadHistory(topic.topic_id)} className="w-full text-left px-3 py-1.5 text-sm text-neutral-500 hover:text-neutral-900 truncate transition-colors font-medium">
+                      {topic.title}
+                    </button>
+                 ))}
+             </div>
+           )}
+           {topics.length > 3 && (
+             <div>
+                 <div className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider px-3 mb-2">Yesterday</div>
+                 {topics.slice(3, 8).map(topic => (
                     <button key={topic._id} onClick={() => loadHistory(topic.topic_id)} className="w-full text-left px-3 py-1.5 text-sm text-neutral-500 hover:text-neutral-900 truncate transition-colors font-medium">
                       {topic.title}
                     </button>
@@ -465,18 +723,34 @@ export default function App() {
            )}
         </div>
 
+        {/* Upgrade Card */}
+        <div className="px-4 py-2 mt-auto">
+          <div className="bg-white border border-neutral-200/70 p-4 rounded-2xl shadow-sm">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+              </div>
+              <span className="text-sm font-semibold text-neutral-800">Only 5 AI reports left</span>
+            </div>
+            <p className="text-xs text-neutral-500 font-medium mb-3">Get deeper insights with Pro</p>
+            <button className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-colors">
+              Upgrade Now
+            </button>
+          </div>
+        </div>
+
         {/* Settings */}
-        <div className="p-4 mt-auto">
-           <button onClick={handleLogout} className="flex items-center justify-between w-full px-3 py-2.5 text-neutral-500 hover:text-neutral-800 hover:bg-black/5 rounded-xl transition-colors font-medium text-sm">
+        <div className="px-4 py-3 pb-6">
+           <button onClick={handleLogout} className="flex items-center justify-between w-full px-2 py-2 text-neutral-500 hover:text-red-600 rounded-xl transition-colors font-medium text-sm">
               <div className="flex items-center gap-3"><Settings className="w-[18px] h-[18px]" /> Settings</div>
            </button>
         </div>
       </motion.div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative w-full h-[100dvh] bg-white rounded-l-[1.5rem] md:rounded-l-[2rem] shadow-[-10px_0_30px_rgba(0,0,0,0.02)] border-l border-neutral-200/50 overflow-hidden">
+      <div className="flex-1 flex flex-col relative w-full h-[100dvh] bg-white rounded-l-[1.5rem] md:rounded-l-[2rem] shadow-[-5px_0_15px_rgba(0,0,0,0.03)] border-l border-neutral-200/50 overflow-hidden">
         
-        {/* Mobile Header (Shows when sidebar is closed on mobile) */}
+        {/* Mobile Header */}
         <header className="h-14 flex items-center justify-between px-4 shrink-0 md:hidden border-b border-neutral-100 bg-white z-20">
            <div className="flex items-center gap-3">
               <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-neutral-500 hover:bg-neutral-100 rounded-lg">
@@ -484,43 +758,151 @@ export default function App() {
               </button>
            </div>
            <HuggingFaceLogo className="w-6 h-6" />
-           <div className="w-8"></div> {/* Spacer for center alignment */}
+           <div className="w-8"></div>
         </header>
 
-        {/* Chat / Empty State Container */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-12 xl:px-24 pb-48 custom-scrollbar scroll-smooth relative z-10 w-full h-full">
+        {/* Chat / Dashboard Container */}
+        <div className="flex-1 overflow-y-auto px-4 md:px-12 lg:px-24 pb-48 custom-scrollbar scroll-smooth relative z-10 w-full h-full bg-[#fcfcfd]">
            
           {messages.length === 0 ? (
-            <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} className="w-full max-w-[800px] mx-auto pt-10 md:pt-20 pb-10 flex flex-col items-center justify-center text-center h-full">
-              <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6 shadow-sm border border-blue-100">
-                <HuggingFaceLogo className="w-10 h-10 drop-shadow-sm" />
+            // Modern Dashboard Layout
+            <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} className="w-full max-w-[900px] mx-auto pt-12 md:pt-20 pb-10 flex flex-col items-start h-full">
+              
+              <div className="mb-10 w-full">
+                <h1 className="text-5xl md:text-6xl font-display font-bold tracking-tight text-neutral-800 mb-2 flex items-center gap-3">
+                  <span className="relative inline-block">
+                    <span className="relative z-10">Welcome, {user.name.split(' ')[0]}!</span>
+                    <span className="absolute bottom-1 left-0 w-full h-5 bg-blue-100 -z-0 rounded-sm"></span>
+                  </span>
+                  👋
+                </h1>
+                <h2 className="text-3xl md:text-4xl text-neutral-400 font-medium font-display mt-2">
+                  How can I help you today?
+                </h2>
               </div>
-              <h1 className="text-4xl md:text-5xl font-display font-medium tracking-tight text-neutral-800 mb-4 leading-tight">
-                Welcome to your AI Agent
-              </h1>
-              <p className="text-lg text-neutral-500 font-medium max-w-lg mb-8">
-                I can process documents, images, and text. Upload any file or ask a question to get started.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
-                <button onClick={() => setInput("What can you do?")} className="p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-blue-300 hover:shadow-md transition-all group">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:scale-110 transition-transform"><Sparkles className="w-4 h-4" /></div>
-                    <h3 className="font-semibold text-neutral-800">Capabilities</h3>
+
+              {/* Grid Layout */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mb-8">
+                
+                {/* Previously viewed files */}
+                <div className="md:col-span-2 bg-white rounded-3xl border border-neutral-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-4 text-neutral-500 font-medium text-sm">
+                    <FileText className="w-4 h-4" /> Previously viewed files
                   </div>
-                  <p className="text-sm text-neutral-500 font-medium">Ask about what this agent can help you with.</p>
-                </button>
-                <button onClick={() => setInput("Summarize my recent conversations.")} className="p-4 bg-white border border-neutral-200 rounded-2xl text-left hover:border-blue-300 hover:shadow-md transition-all group">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg group-hover:scale-110 transition-transform"><History className="w-4 h-4" /></div>
-                    <h3 className="font-semibold text-neutral-800">Memory</h3>
+                  <div className="space-y-3">
+                    <button className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
+                      <div className="w-8 h-8 rounded bg-yellow-100 flex items-center justify-center shrink-0">
+                        <span className="text-yellow-600 font-bold text-xs">M</span>
+                      </div>
+                      <span className="font-medium text-neutral-700 truncate group-hover:text-blue-600">Miro - Product Analytics and Statistics</span>
+                    </button>
+                    <button className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
+                      <div className="w-8 h-8 rounded bg-purple-100 flex items-center justify-center shrink-0">
+                        <span className="text-purple-600 font-bold text-xs">F</span>
+                      </div>
+                      <span className="font-medium text-neutral-700 truncate group-hover:text-blue-600">Figma - UX Research</span>
+                    </button>
+                    <button className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
+                      <div className="w-8 h-8 rounded bg-red-100 flex items-center justify-center shrink-0">
+                        <span className="text-red-600 font-bold text-xs">P</span>
+                      </div>
+                      <span className="font-medium text-neutral-700 truncate group-hover:text-blue-600">R2 Strategic Goals & Objectives.pdf</span>
+                    </button>
                   </div>
-                  <p className="text-sm text-neutral-500 font-medium">Access your personal conversation history and summaries.</p>
+                </div>
+
+                {/* Summarize meeting */}
+                <div className="bg-white rounded-3xl border border-neutral-100 p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col cursor-pointer" onClick={() => handleSend("Summarize my last meeting")}>
+                  <div className="flex items-center gap-2 mb-4 text-neutral-500 font-medium text-sm">
+                    <Sparkles className="w-4 h-4" /> Summarize your last meeting
+                  </div>
+                  <div className="flex gap-4 items-center mt-2">
+                    <div className="w-12 h-12 rounded-2xl bg-neutral-100 overflow-hidden shrink-0">
+                      <img src="https://ui-avatars.com/api/?name=UX&background=random" alt="Meeting" className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-neutral-800 text-lg">UX Strategy Meet up</h3>
+                      <p className="text-sm text-neutral-400 mt-1">1 Apr 2025, 14:00 pm</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Suggested Tasks */}
+                <button onClick={() => handleSend("Help me conduct UX Research")} className="bg-white rounded-3xl border border-neutral-100 p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col text-left hover:border-blue-200">
+                  <div className="flex items-center gap-2 mb-2 text-neutral-400 font-medium text-sm">
+                    <CheckSquare className="w-4 h-4" /> Suggested Task
+                  </div>
+                  <h3 className="font-semibold text-neutral-800 text-xl mt-1">Conduct UX Research</h3>
                 </button>
+                <button onClick={() => handleSend("Write a prospect email")} className="md:col-span-2 bg-white rounded-3xl border border-neutral-100 p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col text-left hover:border-blue-200">
+                  <div className="flex items-center gap-2 mb-2 text-neutral-400 font-medium text-sm">
+                    <CheckSquare className="w-4 h-4" /> Suggested Task
+                  </div>
+                  <h3 className="font-semibold text-neutral-800 text-xl mt-1">Write a prospect email</h3>
+                </button>
+
               </div>
+
+              {/* Tasks List Section */}
+              <div className="w-full mt-4">
+                <div className="flex items-center justify-between mb-4 px-2">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-xl font-bold text-neutral-800 flex items-center gap-2">
+                      <ListTodo className="w-5 h-5 text-neutral-700" /> My Tasks
+                      <span className="text-sm font-medium text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded-full">13</span>
+                    </h3>
+                    <div className="hidden sm:flex items-center bg-white border border-neutral-200 rounded-full px-3 py-1.5 shadow-sm">
+                      <Search className="w-4 h-4 text-neutral-400 mr-2" />
+                      <input type="text" placeholder="Search for name..." className="bg-transparent text-sm focus:outline-none w-32 placeholder:text-neutral-400" />
+                    </div>
+                  </div>
+                  <button onClick={() => handleSend("Prioritize my tasks")} className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-600 hover:bg-purple-100 rounded-xl text-sm font-semibold transition-colors border border-purple-100 shadow-sm">
+                    <Sparkles className="w-4 h-4" /> Prioritize Tasks
+                  </button>
+                </div>
+
+                <div className="bg-white border border-neutral-100 shadow-sm rounded-3xl overflow-hidden p-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-3 p-3 hover:bg-neutral-50 rounded-2xl group transition-colors cursor-pointer">
+                      <Circle className="w-5 h-5 text-neutral-300 group-hover:text-neutral-400" />
+                      <span className="font-medium text-neutral-800 flex-1">Design Meeting</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-neutral-500 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> 2 pm</span>
+                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Join now</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 hover:bg-neutral-50 rounded-2xl group transition-colors cursor-pointer">
+                      <Circle className="w-5 h-5 text-neutral-300 group-hover:text-neutral-400" />
+                      <span className="font-medium text-neutral-800 flex-1">Refine UI components based on user feedback</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg flex items-center gap-1"><FileWarning className="w-3 h-3" /> Urgent</span>
+                        <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg">By today</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 hover:bg-neutral-50 rounded-2xl group transition-colors cursor-pointer">
+                      <Circle className="w-5 h-5 text-neutral-300 group-hover:text-neutral-400" />
+                      <span className="font-medium text-neutral-800 flex-1">Prepare a prototype for usability testing</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg flex items-center gap-1"><Loader2 className="w-3 h-3" /> In progress</span>
+                        <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-lg">By tomorrow</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 hover:bg-neutral-50 rounded-2xl group transition-colors cursor-pointer">
+                      <Circle className="w-5 h-5 text-neutral-300 group-hover:text-neutral-400" />
+                      <span className="font-medium text-neutral-800 flex-1">Collaborate with developers on implementation detail</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-neutral-500 bg-neutral-100 px-2.5 py-1 rounded-lg border border-neutral-200">To do</span>
+                        <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-lg">By tomorrow</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </motion.div>
           ) : (
             // Active Chat State
-            <div className="w-full max-w-4xl mx-auto space-y-8 pt-6 pb-20">
+            <div className="w-full max-w-4xl mx-auto space-y-8 pt-10 pb-20">
                {messages.map((msg, idx) => (
                   <motion.div 
                     initial={{ opacity: 0, y: 10 }}
@@ -604,6 +986,24 @@ export default function App() {
                             {msg.content || ''}
                           </ReactMarkdown>
                         </div>
+                        
+                        {msg.role === 'assistant' && (
+                          <div className="mt-3 flex items-center justify-end">
+                            <button
+                              onClick={() => playTTS(msg.id, msg.content)}
+                              className={cn(
+                                "p-1.5 rounded-lg transition-colors flex items-center justify-center",
+                                playingAudioMsgId === msg.id 
+                                  ? "bg-blue-100 text-blue-600" 
+                                  : "text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100"
+                              )}
+                              title={playingAudioMsgId === msg.id ? "Stop reading" : "Read aloud"}
+                            >
+                              <Volume2 className={cn("w-4 h-4", playingAudioMsgId === msg.id && "animate-pulse")} />
+                            </button>
+                          </div>
+                        )}
+                        
                       </div>
                     </div>
                   </motion.div>
@@ -630,10 +1030,10 @@ export default function App() {
 
         </div>
 
-        {/* Floating Input Area - Exactly matching the video */}
-        <div className="absolute bottom-0 inset-x-0 pb-6 pt-12 px-4 w-full z-30 bg-gradient-to-t from-white via-white/95 to-transparent pointer-events-none flex flex-col items-center justify-end">
+        {/* Floating Input Area - Modern Pill Style */}
+        <div className="absolute bottom-0 inset-x-0 pb-8 pt-12 px-4 w-full z-30 bg-gradient-to-t from-[#fcfcfd] via-[#fcfcfd]/90 to-transparent pointer-events-none flex flex-col items-center justify-end">
           
-          <div className="w-full max-w-[850px] pointer-events-auto bg-white rounded-full border border-neutral-200 shadow-[0_8px_30px_-5px_rgba(0,0,0,0.1)] p-2 flex items-center gap-3 transition-all focus-within:shadow-[0_15px_40px_-5px_rgba(0,0,0,0.15)] focus-within:border-neutral-300">
+          <div className="w-full max-w-[850px] pointer-events-auto bg-white rounded-full border border-neutral-200 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.08)] p-2 flex items-center gap-3 transition-all focus-within:shadow-[0_15px_50px_-10px_rgba(0,0,0,0.12)] focus-within:border-neutral-300">
             <InputAccessory onUpload={handleFileUpload} />
             {attachment && (
               <div className="absolute bottom-[110%] left-6 bg-white border border-neutral-200 shadow-md rounded-xl px-3 py-1.5 flex items-center gap-2 text-sm">
@@ -653,23 +1053,25 @@ export default function App() {
               className="flex-1 bg-transparent text-neutral-800 placeholder:text-neutral-400 focus:outline-none resize-none min-h-[26px] max-h-[150px] py-3 text-[15px] font-medium leading-relaxed"
               rows={1}
             />
-            {input.trim() ? (
+            {input.trim() || attachment ? (
               <button
-                onClick={handleSend}
+                onClick={() => handleSend()}
                 disabled={isLoading}
-                className="w-10 h-10 rounded-full bg-neutral-900 text-white flex items-center justify-center shrink-0 hover:bg-black transition-all shadow-[0_2px_8px_rgba(0,0,0,0.2)] active:scale-95 disabled:opacity-50"
+                className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 hover:bg-blue-700 transition-all shadow-[0_2px_8px_rgba(37,99,235,0.3)] active:scale-95 disabled:opacity-50"
               >
                 <ArrowUp className="w-5 h-5" />
               </button>
             ) : (
-              <div className="w-10 h-10 rounded-full bg-transparent flex items-center justify-center shrink-0">
-                {/* Spacer when no input to keep layout stable */}
-              </div>
+              <button
+                onClick={toggleListening}
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all shadow-[0_2px_8px_rgba(0,0,0,0.05)] active:scale-95",
+                  isListening ? "bg-red-500 text-white" : "bg-neutral-50 text-neutral-500 hover:bg-neutral-100"
+                )}
+              >
+                {isListening ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+              </button>
             )}
-          </div>
-
-          <div className="mt-3 text-center text-[11px] font-bold text-neutral-400 tracking-widest pointer-events-auto uppercase mb-1 drop-shadow-sm">
-            Made With Love By Aaditya Labs AI
           </div>
         </div>
 
