@@ -10,7 +10,7 @@ export async function handleStartCommand(bot: TelegramBot, msg: TelegramBot.Mess
     const webUrl = process.env.PUBLIC_URL || 'https://ais-pre-kqqznwd43u52hcij2wfzgv-15028068203.asia-east1.run.app';
     
     const welcomeMessage = `
-🌟 <b>Welcome to Hugging Face, ${user.name}!</b> 🌟
+🌟 <b>Welcome to AadityaLabs AI, ${user.name}!</b> 🌟
 
 I am a highly advanced AI Assistant. I can:
 💬 Chat with you using state-of-the-art intelligence

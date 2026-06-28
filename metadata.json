@@ -1,6 +1,6 @@
 {
-  "name": "Hugging Face",
-  "description": "A powerful Telegram bot powered by Hugging Face models with a developer dashboard.",
+  "name": "AadityaLabs",
+  "description": "A powerful Telegram bot powered by AI models with a developer dashboard.",
   "requestFramePermissions": [
     "microphone"
   ],

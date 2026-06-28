@@ -131,7 +131,7 @@ export async function startBot(token: string) {
       
       let historyText = `✅ <b>Conversation Restored!</b>\nHere are the last few messages:\n\n`;
       history.reverse().forEach(msg => {
-        const role = msg.role === 'user' ? '👤 <b>You:</b>' : '🤖 <b>Hugging Face:</b>';
+        const role = msg.role === 'user' ? '👤 <b>You:</b>' : '🤖 <b>AadityaLabs AI:</b>';
         const content = msg.content.length > 100 ? msg.content.substring(0, 100) + '...' : msg.content;
         historyText += `${role} ${content}\n\n`;
       });

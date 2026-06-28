@@ -15,7 +15,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './lib/utils';
-import { HuggingFaceLogo } from './components/Logo';
+import { BrandingLogo } from './components/Logo';
 
 interface Message {
   id: string;
@@ -139,6 +139,8 @@ const InputAccessory = ({ onUpload }: { onUpload: (file: File) => void }) => {
 }
 
 export default function App() {
+  type Page = 'home' | 'tasks' | 'meetings' | 'files' | 'shared' | 'settings';
+  const [currentPage, setCurrentPage] = useState<Page>('home');
   const [user, setUser] = useState<UserData | null>(null);
   const [needsWebLogin, setNeedsWebLogin] = useState(false);
   const [authApiKey, setAuthApiKey] = useState('');
@@ -263,6 +265,7 @@ export default function App() {
   const loadHistory = async (topicId: string) => {
     if (!user) return;
     setIsLoading(true);
+    navigate('home');
     try {
       const res = await fetch(`/api/web/history/${user.telegram_id}/${topicId}`);
       const data = await res.json();
@@ -290,10 +293,15 @@ export default function App() {
     localStorage.removeItem('hfapi_user');
   };
 
+  const navigate = (page: Page) => {
+    setCurrentPage(page);
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  };
+
   const startNewChat = () => {
     setMessages([]);
     setCurrentTopicId(`topic_${Date.now()}`);
-    if (window.innerWidth < 768) setSidebarOpen(false);
+    navigate('home');
   };
 
   const toggleListening = () => {
@@ -463,7 +471,7 @@ export default function App() {
              <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500/20 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2"></div>
              
              <div className="relative z-10 flex items-center gap-3 text-white">
-                <HuggingFaceLogo className="w-8 h-8" />
+                <BrandingLogo className="w-8 h-8" />
                 <span className="text-2xl font-bold font-display">AadityaLabs</span>
              </div>
              <div className="relative z-10">
@@ -480,7 +488,7 @@ export default function App() {
               className="w-full max-w-sm"
             >
               <div className="flex items-center justify-center gap-3 text-[#1A1A1D] md:hidden mb-12">
-                <HuggingFaceLogo className="w-8 h-8" />
+                <BrandingLogo className="w-8 h-8" />
                 <span className="text-2xl font-bold font-display">AadityaLabs</span>
               </div>
               
@@ -528,7 +536,7 @@ export default function App() {
                    />
                  </div>
                  <div>
-                   <label className="block text-sm font-semibold text-neutral-700 mb-2">Hugging Face API Key</label>
+                   <label className="block text-sm font-semibold text-neutral-700 mb-2">AadityaLabs AI API Key</label>
                    <input 
                      name="apiKey" type="password" placeholder="hf_..." required
                      className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 text-neutral-900 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-medium placeholder:font-normal"
@@ -576,7 +584,7 @@ export default function App() {
                 <Lock className="w-8 h-8" />
              </div>
              <h2 className="text-2xl font-bold font-display text-neutral-800 mb-2">API Key Required</h2>
-             <p className="text-neutral-500 text-sm">Please provide your Hugging Face API key to continue using the AI features. You only need to do this once.</p>
+             <p className="text-neutral-500 text-sm">Please provide your AadityaLabs AI API key to continue using the AI features. You only need to do this once.</p>
           </div>
           
           <div className="space-y-4">
@@ -678,24 +686,24 @@ export default function App() {
 
         {/* Primary Nav */}
         <div className="px-3 py-2 space-y-1">
-           <button onClick={startNewChat} className="w-full flex items-center justify-between px-3 py-2 bg-blue-50 text-blue-700 rounded-xl font-semibold text-sm transition-all group">
-             <div className="flex items-center gap-3"><Home className="w-[18px] h-[18px] text-blue-600" /> Home</div>
+           <button onClick={() => { startNewChat(); }} className={cn("w-full flex items-center justify-between px-3 py-2 rounded-xl font-semibold text-sm transition-all group", currentPage === 'home' ? "bg-blue-50 text-blue-700" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700 font-medium")}>
+             <div className="flex items-center gap-3"><Home className={cn("w-[18px] h-[18px]", currentPage === 'home' ? "text-blue-600" : "")} /> Home</div>
            </button>
-           <button onClick={startNewChat} className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
+           <button onClick={() => { startNewChat(); }} className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
              <div className="flex items-center gap-3"><MessageSquare className="w-[18px] h-[18px]" /> New Chat</div>
              <Plus className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
            </button>
-           <button className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
-             <div className="flex items-center gap-3"><CheckSquare className="w-[18px] h-[18px]" /> My Tasks</div>
+           <button onClick={() => navigate('tasks')} className={cn("w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all group", currentPage === 'tasks' ? "bg-blue-50 text-blue-700 font-semibold" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700 font-medium")}>
+             <div className="flex items-center gap-3"><CheckSquare className={cn("w-[18px] h-[18px]", currentPage === 'tasks' ? "text-blue-600" : "")} /> My Tasks</div>
            </button>
-           <button className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
-             <div className="flex items-center gap-3"><Calendar className="w-[18px] h-[18px]" /> My Meetings</div>
+           <button onClick={() => navigate('meetings')} className={cn("w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all group", currentPage === 'meetings' ? "bg-blue-50 text-blue-700 font-semibold" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700 font-medium")}>
+             <div className="flex items-center gap-3"><Calendar className={cn("w-[18px] h-[18px]", currentPage === 'meetings' ? "text-blue-600" : "")} /> My Meetings</div>
            </button>
-           <button className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
-             <div className="flex items-center gap-3"><Folder className="w-[18px] h-[18px]" /> Saved Files</div>
+           <button onClick={() => navigate('files')} className={cn("w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all group", currentPage === 'files' ? "bg-blue-50 text-blue-700 font-semibold" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700 font-medium")}>
+             <div className="flex items-center gap-3"><Folder className={cn("w-[18px] h-[18px]", currentPage === 'files' ? "text-blue-600" : "")} /> Saved Files</div>
            </button>
-           <button className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
-             <div className="flex items-center gap-3"><Users className="w-[18px] h-[18px]" /> Shared with me</div>
+           <button onClick={() => navigate('shared')} className={cn("w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all group", currentPage === 'shared' ? "bg-blue-50 text-blue-700 font-semibold" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700 font-medium")}>
+             <div className="flex items-center gap-3"><Users className={cn("w-[18px] h-[18px]", currentPage === 'shared' ? "text-blue-600" : "")} /> Shared with me</div>
            </button>
         </div>
 
@@ -733,7 +741,7 @@ export default function App() {
               <span className="text-sm font-semibold text-neutral-800">Only 5 AI reports left</span>
             </div>
             <p className="text-xs text-neutral-500 font-medium mb-3">Get deeper insights with Pro</p>
-            <button className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-colors">
+            <button onClick={() => navigate('settings')} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-colors">
               Upgrade Now
             </button>
           </div>
@@ -741,8 +749,11 @@ export default function App() {
 
         {/* Settings */}
         <div className="px-4 py-3 pb-6">
-           <button onClick={handleLogout} className="flex items-center justify-between w-full px-2 py-2 text-neutral-500 hover:text-red-600 rounded-xl transition-colors font-medium text-sm">
-              <div className="flex items-center gap-3"><Settings className="w-[18px] h-[18px]" /> Settings</div>
+           <button onClick={() => navigate('settings')} className={cn("flex items-center justify-between w-full px-2 py-2 rounded-xl transition-colors font-medium text-sm mb-1", currentPage === 'settings' ? "bg-blue-50 text-blue-700 font-semibold" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700")}>
+              <div className="flex items-center gap-3"><Settings className={cn("w-[18px] h-[18px]", currentPage === 'settings' ? "text-blue-600" : "")} /> Settings</div>
+           </button>
+           <button onClick={handleLogout} className="flex items-center justify-between w-full px-2 py-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors font-medium text-sm">
+              <div className="flex items-center gap-3"><Lock className="w-[18px] h-[18px]" /> Logout</div>
            </button>
         </div>
       </motion.div>
@@ -757,12 +768,14 @@ export default function App() {
                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
               </button>
            </div>
-           <HuggingFaceLogo className="w-6 h-6" />
+           <BrandingLogo className="w-6 h-6" />
            <div className="w-8"></div>
         </header>
 
         {/* Chat / Dashboard Container */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-12 lg:px-24 pb-48 custom-scrollbar scroll-smooth relative z-10 w-full h-full bg-[#fcfcfd]">
+        {currentPage === 'home' ? (
+          <>
+            <div className="flex-1 overflow-y-auto px-4 md:px-12 lg:px-24 pb-48 custom-scrollbar scroll-smooth relative z-10 w-full h-full bg-[#fcfcfd]">
            
           {messages.length === 0 ? (
             // Modern Dashboard Layout
@@ -790,19 +803,19 @@ export default function App() {
                     <FileText className="w-4 h-4" /> Previously viewed files
                   </div>
                   <div className="space-y-3">
-                    <button className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
+                    <button onClick={() => handleSend("Analyze Miro - Product Analytics and Statistics")} className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
                       <div className="w-8 h-8 rounded bg-yellow-100 flex items-center justify-center shrink-0">
                         <span className="text-yellow-600 font-bold text-xs">M</span>
                       </div>
                       <span className="font-medium text-neutral-700 truncate group-hover:text-blue-600">Miro - Product Analytics and Statistics</span>
                     </button>
-                    <button className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
+                    <button onClick={() => handleSend("Analyze Figma - UX Research")} className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
                       <div className="w-8 h-8 rounded bg-purple-100 flex items-center justify-center shrink-0">
                         <span className="text-purple-600 font-bold text-xs">F</span>
                       </div>
                       <span className="font-medium text-neutral-700 truncate group-hover:text-blue-600">Figma - UX Research</span>
                     </button>
-                    <button className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
+                    <button onClick={() => handleSend("Analyze R2 Strategic Goals & Objectives.pdf")} className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
                       <div className="w-8 h-8 rounded bg-red-100 flex items-center justify-center shrink-0">
                         <span className="text-red-600 font-bold text-xs">P</span>
                       </div>
@@ -917,7 +930,7 @@ export default function App() {
                       {msg.role === 'user' ? (
                         user?.photoUrl ? <img src={user.photoUrl} alt="User" /> : <User className="w-5 h-5 text-neutral-400" />
                       ) : (
-                        <HuggingFaceLogo className="w-5 h-5 drop-shadow-sm" />
+                        <BrandingLogo className="w-5 h-5 drop-shadow-sm" />
                       )}
                     </div>
                 
@@ -1012,7 +1025,7 @@ export default function App() {
                {isLoading && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4">
                     <div className="w-8 h-8 shrink-0 rounded-full bg-white border border-neutral-200 shadow-sm flex items-center justify-center mt-1 z-10">
-                      <HuggingFaceLogo className="w-5 h-5 opacity-80" />
+                      <BrandingLogo className="w-5 h-5 opacity-80" />
                     </div>
                     <div className="bg-white border border-neutral-200/80 shadow-[0_2px_10px_rgba(0,0,0,0.03)] px-5 py-4 rounded-[1.5rem] rounded-tl-[4px] flex items-center gap-3">
                       <div className="flex gap-1">
@@ -1074,7 +1087,275 @@ export default function App() {
             )}
           </div>
         </div>
+          </>
+        ) : currentPage === 'tasks' ? (
+          <TasksView onAction={(task: string) => {
+            startNewChat();
+            setTimeout(() => handleSend(`I need help with this task: ${task}`), 100);
+          }} />
+        ) : currentPage === 'meetings' ? (
+          <MeetingsView onViewSummary={() => {
+            startNewChat();
+            setTimeout(() => handleSend("Summarize the Weekly Design Crit meeting from yesterday"), 100);
+          }} />
+        ) : currentPage === 'files' ? (
+          <FilesView onAction={(file: string) => {
+            startNewChat();
+            setTimeout(() => handleSend(`Analyze the file: ${file}`), 100);
+          }} />
+        ) : currentPage === 'shared' ? (
+          <SharedView onAction={(file: string) => {
+            startNewChat();
+            setTimeout(() => handleSend(`What are the key points in the shared document: ${file}?`), 100);
+          }} />
+        ) : currentPage === 'settings' ? (
+          <SettingsView user={user} setAuthApiKey={setAuthApiKey} setNeedsWebLogin={setNeedsWebLogin} setUser={setUser} navigate={navigate} />
+        ) : null}
 
+      </div>
+    </div>
+  );
+}
+
+function TasksView({ onAction }: any) {
+  return (
+    <div className="flex-1 w-full h-full bg-[#fcfcfd] p-8 md:p-12 overflow-y-auto">
+      <h2 className="text-3xl font-display font-bold text-neutral-800 mb-6">My Tasks</h2>
+      <div className="bg-white rounded-3xl border border-neutral-200 p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4 pb-4 border-b border-neutral-100">
+          <div className="flex items-center gap-4 flex-1">
+            <input type="checkbox" className="w-5 h-5 rounded border-neutral-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+            <div>
+              <h4 className="font-semibold text-neutral-800">Review Q3 Marketing Strategy</h4>
+              <p className="text-sm text-neutral-500">Due today • Assigned by Sarah</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+             <span className="px-3 py-1 bg-red-50 text-red-600 text-xs font-semibold rounded-full">High Priority</span>
+             <button onClick={() => onAction("Review Q3 Marketing Strategy")} className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-colors">Ask AI</button>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4 pb-4 border-b border-neutral-100">
+          <div className="flex items-center gap-4 flex-1">
+            <input type="checkbox" className="w-5 h-5 rounded border-neutral-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+            <div>
+              <h4 className="font-semibold text-neutral-800">Approve new logo assets</h4>
+              <p className="text-sm text-neutral-500">Due tomorrow • Design Team</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+             <span className="px-3 py-1 bg-neutral-100 text-neutral-600 text-xs font-semibold rounded-full">Normal</span>
+             <button onClick={() => onAction("Approve new logo assets")} className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-colors">Ask AI</button>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <input type="checkbox" defaultChecked className="w-5 h-5 rounded border-neutral-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+          <div className="flex-1">
+            <h4 className="font-semibold text-neutral-400 line-through">Weekly Sync Notes</h4>
+            <p className="text-sm text-neutral-400">Completed yesterday</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MeetingsView({ onViewSummary }: any) {
+  return (
+    <div className="flex-1 w-full h-full bg-[#fcfcfd] p-8 md:p-12 overflow-y-auto">
+      <h2 className="text-3xl font-display font-bold text-neutral-800 mb-6">My Meetings</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-3xl border border-neutral-200 p-6 shadow-sm flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg uppercase tracking-wider">Upcoming</span>
+            <span className="text-sm font-medium text-neutral-500">10:00 AM - 11:00 AM</span>
+          </div>
+          <h3 className="text-xl font-semibold text-neutral-800 mt-2">Product Alignment Sync</h3>
+          <p className="text-neutral-500 text-sm flex-1">Discussing the roadmap for Q4 with the engineering and design leads.</p>
+          <div className="mt-4 flex gap-2">
+             <button className="flex-1 py-2 bg-neutral-900 text-white rounded-xl text-sm font-semibold hover:bg-black transition-colors">Join Call</button>
+             <button className="px-4 py-2 bg-neutral-100 text-neutral-600 rounded-xl text-sm font-semibold hover:bg-neutral-200 transition-colors">Reschedule</button>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-3xl border border-neutral-200 p-6 shadow-sm flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="px-3 py-1 bg-neutral-100 text-neutral-600 text-xs font-bold rounded-lg uppercase tracking-wider">Past</span>
+            <span className="text-sm font-medium text-neutral-400">Yesterday</span>
+          </div>
+          <h3 className="text-xl font-semibold text-neutral-800 mt-2">Weekly Design Crit</h3>
+          <p className="text-neutral-500 text-sm flex-1">Reviewing the new dashboard mockups.</p>
+          <div className="mt-4">
+             <button onClick={onViewSummary} className="w-full py-2 bg-blue-50 text-blue-600 rounded-xl text-sm font-semibold hover:bg-blue-100 transition-colors">View AI Summary</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FilesView({ onAction }: any) {
+  return (
+    <div className="flex-1 w-full h-full bg-[#fcfcfd] p-8 md:p-12 overflow-y-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-3xl font-display font-bold text-neutral-800">Saved Files</h2>
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2">
+          <Plus className="w-4 h-4" /> Upload
+        </button>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { name: "Q3_Report.pdf", type: "PDF", color: "bg-red-100 text-red-600" },
+          { name: "Logo_Assets.zip", type: "ZIP", color: "bg-neutral-100 text-neutral-600" },
+          { name: "Meeting_Recording.mp4", type: "VIDEO", color: "bg-blue-100 text-blue-600" },
+          { name: "Financials_2024.xlsx", type: "EXCEL", color: "bg-green-100 text-green-600" },
+        ].map((file, i) => (
+          <div onClick={() => onAction(file.name)} key={i} className="bg-white rounded-2xl border border-neutral-200 p-5 shadow-sm hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group flex flex-col items-start relative">
+             <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+               <button className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg">
+                 <Sparkles className="w-3.5 h-3.5" />
+               </button>
+             </div>
+             <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4", file.color)}>
+               <span className="font-bold text-xs">{file.type}</span>
+             </div>
+             <h4 className="font-semibold text-neutral-800 text-sm truncate w-full group-hover:text-blue-600">{file.name}</h4>
+             <p className="text-xs text-neutral-400 mt-1">2 days ago</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SharedView({ onAction }: any) {
+  return (
+    <div className="flex-1 w-full h-full bg-[#fcfcfd] p-8 md:p-12 overflow-y-auto">
+      <h2 className="text-3xl font-display font-bold text-neutral-800 mb-6">Shared with me</h2>
+      <div className="bg-white rounded-3xl border border-neutral-200 overflow-hidden shadow-sm">
+         <table className="w-full text-left text-sm">
+            <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
+              <tr>
+                <th className="px-6 py-4">Name</th>
+                <th className="px-6 py-4 hidden sm:table-cell">Shared by</th>
+                <th className="px-6 py-4 hidden sm:table-cell">Date</th>
+                <th className="px-6 py-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100 text-neutral-700">
+              <tr className="hover:bg-neutral-50 transition-colors group">
+                <td className="px-6 py-4 font-medium flex items-center gap-3"><Folder className="w-4 h-4 text-blue-500 shrink-0" /> <span className="truncate">Project Alpha Specs</span></td>
+                <td className="px-6 py-4 hidden sm:table-cell">Alice Cooper</td>
+                <td className="px-6 py-4 text-neutral-400 hidden sm:table-cell">Oct 24, 2024</td>
+                <td className="px-6 py-4 text-right">
+                  <button onClick={() => onAction("Project Alpha Specs")} className="px-3 py-1.5 bg-neutral-100 text-neutral-600 group-hover:bg-blue-50 group-hover:text-blue-600 text-xs font-semibold rounded-lg transition-colors">Ask AI</button>
+                </td>
+              </tr>
+              <tr className="hover:bg-neutral-50 transition-colors group">
+                <td className="px-6 py-4 font-medium flex items-center gap-3"><FileText className="w-4 h-4 text-neutral-400 shrink-0" /> <span className="truncate">Branding Guidelines</span></td>
+                <td className="px-6 py-4 hidden sm:table-cell">Design Team</td>
+                <td className="px-6 py-4 text-neutral-400 hidden sm:table-cell">Oct 20, 2024</td>
+                <td className="px-6 py-4 text-right">
+                  <button onClick={() => onAction("Branding Guidelines")} className="px-3 py-1.5 bg-neutral-100 text-neutral-600 group-hover:bg-blue-50 group-hover:text-blue-600 text-xs font-semibold rounded-lg transition-colors">Ask AI</button>
+                </td>
+              </tr>
+              <tr className="hover:bg-neutral-50 transition-colors group">
+                <td className="px-6 py-4 font-medium flex items-center gap-3"><FileText className="w-4 h-4 text-neutral-400 shrink-0" /> <span className="truncate">Q4 Budget</span></td>
+                <td className="px-6 py-4 hidden sm:table-cell">Finance</td>
+                <td className="px-6 py-4 text-neutral-400 hidden sm:table-cell">Oct 15, 2024</td>
+                <td className="px-6 py-4 text-right">
+                  <button onClick={() => onAction("Q4 Budget")} className="px-3 py-1.5 bg-neutral-100 text-neutral-600 group-hover:bg-blue-50 group-hover:text-blue-600 text-xs font-semibold rounded-lg transition-colors">Ask AI</button>
+                </td>
+              </tr>
+            </tbody>
+         </table>
+      </div>
+    </div>
+  );
+}
+
+function SettingsView({ user, setAuthApiKey, setNeedsWebLogin, setUser, navigate }: any) {
+  return (
+    <div className="flex-1 w-full h-full bg-[#fcfcfd] p-8 md:p-12 overflow-y-auto">
+      <h2 className="text-3xl font-display font-bold text-neutral-800 mb-8">Settings</h2>
+      
+      <div className="max-w-2xl space-y-8">
+        {/* Profile Section */}
+        <section>
+          <h3 className="text-lg font-semibold text-neutral-800 mb-4">Profile</h3>
+          <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-sm flex items-center gap-6">
+            <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-2xl font-bold overflow-hidden">
+               {user?.photoUrl ? <img src={user.photoUrl} alt="User" className="w-full h-full object-cover" /> : (user?.name || 'U').charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <h4 className="text-xl font-bold text-neutral-900">{user?.name || 'User'}</h4>
+              <p className="text-neutral-500 mb-3">Manage your personal information</p>
+              <button className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-sm font-semibold rounded-xl transition-colors">Edit Profile</button>
+            </div>
+          </div>
+        </section>
+
+        {/* API Key Section */}
+        <section>
+          <h3 className="text-lg font-semibold text-neutral-800 mb-4">API Configuration</h3>
+          <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-sm space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-neutral-700 mb-2">AadityaLabs AI API Key</label>
+              <input 
+                type="password" 
+                defaultValue="••••••••••••••••••••••••" 
+                readOnly
+                className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 text-neutral-900 rounded-2xl outline-none font-medium text-sm"
+              />
+            </div>
+            <button 
+              onClick={() => {
+                setAuthApiKey('');
+                setUser(null);
+                setNeedsWebLogin(true);
+                localStorage.removeItem('hfapi_user');
+                navigate('home');
+              }} 
+              className="px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 text-sm font-semibold rounded-xl transition-colors"
+            >
+              Update API Key
+            </button>
+          </div>
+        </section>
+
+        {/* Preferences */}
+        <section>
+          <h3 className="text-lg font-semibold text-neutral-800 mb-4">Preferences</h3>
+          <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-semibold text-neutral-800">Dark Mode</h4>
+                <p className="text-sm text-neutral-500">Switch between light and dark themes</p>
+              </div>
+              <div className="w-12 h-6 bg-neutral-200 rounded-full relative cursor-pointer">
+                <div className="w-5 h-5 bg-white rounded-full absolute top-0.5 left-0.5 shadow-sm"></div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-semibold text-neutral-800">Desktop Notifications</h4>
+                <p className="text-sm text-neutral-500">Get alerted for important updates</p>
+              </div>
+              <div className="w-12 h-6 bg-blue-500 rounded-full relative cursor-pointer">
+                <div className="w-5 h-5 bg-white rounded-full absolute top-0.5 right-0.5 shadow-sm"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        
+        {/* Danger Zone */}
+        <section>
+          <h3 className="text-lg font-semibold text-red-600 mb-4">Danger Zone</h3>
+          <div className="bg-red-50 p-6 rounded-3xl border border-red-100 shadow-sm space-y-4">
+             <p className="text-sm text-red-600 font-medium">Permanently delete your account and all associated data.</p>
+             <button className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl transition-colors">Delete Account</button>
+          </div>
+        </section>
       </div>
     </div>
   );
