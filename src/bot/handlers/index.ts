@@ -6,7 +6,6 @@ import { sendSafeHtml, withContinuousAction, processAndSendAiResponse } from '..
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
-import pdfParse from 'pdf-parse';
 
 const userTimeouts = new Map<number, NodeJS.Timeout>();
 
@@ -277,6 +276,7 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
         let extractedText = '';
 
         if (doc.mime_type === 'application/pdf' || doc.file_name?.endsWith('.pdf')) {
+          const pdfParse = (await import('pdf-parse')).default;
           const pdfData = await pdfParse(buffer);
           extractedText = pdfData.text;
         } else if (doc.mime_type === 'application/zip' || doc.mime_type === 'application/x-zip-compressed' || doc.file_name?.endsWith('.zip')) {

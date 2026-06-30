@@ -32,7 +32,7 @@ export class AgentService {
     while (loopCount < MAX_LOOPS) {
       let aiResponse: string;
       try {
-        if (onStatus) onStatus("🤔 Thinking...");
+        if (onStatus) onStatus("Analyzing request...");
         aiResponse = await ai.generateText(currentPrompt, history, userName, 'web', currentMemory);
         
         if (aiResponse.includes('[SYSTEM_ERROR_CREDITS]')) {
@@ -96,7 +96,7 @@ export class AgentService {
           
           currentPrompt = `[System: Image generated successfully for "${imgPrompt}". Continue your response.]`;
           loopCount++;
-          if (onStatus) onStatus(`🤔 Analyzing generated image...`);
+          if (onStatus) onStatus(`Processing generated image...`);
           continue;
         } catch (e) {
           currentPrompt = `[System: Failed to generate image. Inform the user and continue.]`;

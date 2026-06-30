@@ -248,7 +248,12 @@ ${platformSpecificInstructions}
             max_tokens: maxTokens,
             temperature: 0.5,
           });
-          return response.choices[0].message.content?.trim();
+          const content = response.choices[0].message.content?.trim();
+          if (content && modelName !== 'meta-llama/Meta-Llama-3-8B-Instruct') {
+             // Let the user know which model was dynamically selected if it's not the default
+             return `[MESSAGE: 🤖 Dynamically selected model: ${modelName}]\n${content}`;
+          }
+          return content;
         } catch (error: any) {
           const errorMsg = String(error?.message || error);
           if (errorMsg.includes('depleted your monthly included credits')) {
@@ -259,78 +264,56 @@ ${platformSpecificInstructions}
         }
       };
 
-      type TaskCategory = 'coding' | 'reasoning' | 'creative' | 'math' | 'general';
-      let category: TaskCategory = 'general';
-      const lowerPrompt = prompt.toLowerCase();
-      
-      if (/\b(math|calculate|equation|calculus|algebra|geometry)\b/.test(lowerPrompt)) {
-        category = 'math';
-      } else if (/\b(code|script|bug|fix|programming|python|javascript|typescript|c\+\+|java|html|css|react|node|api)\b/.test(lowerPrompt)) {
-        category = 'coding';
-      } else if (/\b(research|think|reason|deep|explain|analyze|theory|concept|why|how)\b/.test(lowerPrompt)) {
-        category = 'reasoning';
-      } else if (/\b(write|story|poem|creative|imagine|essay|song|lyrics|joke)\b/.test(lowerPrompt)) {
-        category = 'creative';
-      }
+      const selectorPrompt = `You are the core routing intelligence of AadityaLabs AI. Based on the user's prompt, select the absolute most efficient Hugging Face model from the list below that perfectly suits the task. Balance cost, speed, and accuracy.
 
-      const categoryConfigs: Record<TaskCategory, { search?: string, fallbacks: string[]}> = {
-        coding: {
-          search: 'coder',
-          fallbacks: [
-            'Qwen/Qwen2.5-Coder-32B-Instruct',
-            'meta-llama/Llama-3.3-70B-Instruct',
-            'deepseek-ai/DeepSeek-Coder-V2-Instruct'
-          ]
-        },
-        reasoning: {
-          search: 'reasoning',
-          fallbacks: [
-            'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
-            'deepseek-ai/DeepSeek-R1-Distill-Llama-70B',
-            'meta-llama/Llama-3.3-70B-Instruct'
-          ]
-        },
-        math: {
-          search: 'math',
-          fallbacks: [
-            'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
-            'Qwen/Qwen2.5-Math-72B-Instruct',
-            'meta-llama/Llama-3.3-70B-Instruct'
-          ]
-        },
-        creative: {
-          search: 'creative',
-          fallbacks: [
-            'meta-llama/Llama-3.3-70B-Instruct',
-            'NousResearch/Hermes-3-Llama-3.1-8B',
-            'mistralai/Mixtral-8x7B-Instruct-v0.1'
-          ]
-        },
-        general: {
-          search: undefined,
-          fallbacks: [
-            'meta-llama/Llama-3.3-70B-Instruct',
-            'Qwen/Qwen2.5-72B-Instruct',
-            'meta-llama/Llama-3.1-8B-Instruct'
-          ]
+Available Models:
+- "Qwen/Qwen2.5-Coder-32B-Instruct" (For extremely complex coding/architecture, costs more)
+- "Qwen/Qwen2.5-Coder-7B-Instruct" (For standard coding, programming, debugging, very fast/cheap)
+- "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B" (For complex reasoning, advanced logic, heavy math, costs more)
+- "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" (For standard reasoning, logic, math, fast/cheap)
+- "NousResearch/Hermes-3-Llama-3.1-8B" (For creative writing, uncensored thought, roleplay)
+- "google/gemma-2-9b-it" (For highly creative storytelling, detailed prose, poetry)
+- "meta-llama/Meta-Llama-3-8B-Instruct" (For general chat, speed, standard tasks, Q&A, cheapest)
+- "mistralai/Mistral-7B-Instruct-v0.3" (Good alternative for general/creative tasks)
+
+User Prompt: "${prompt.substring(0, 500)}"
+
+Return ONLY the exact model string (e.g., "meta-llama/Meta-Llama-3-8B-Instruct"). Do not include any other text, reasoning, or markdown.`;
+
+      let selectedModel = 'meta-llama/Meta-Llama-3-8B-Instruct'; // default fallback
+      try {
+        const routeResponse = await this.hf.chatCompletion({
+          model: 'meta-llama/Meta-Llama-3-8B-Instruct', // Fast, cheap router model
+          messages: [{ role: 'user', content: selectorPrompt }],
+          max_tokens: 30,
+          temperature: 0.1,
+        });
+        const routerOutput = routeResponse.choices[0].message.content?.trim() || '';
+        const match = routerOutput.match(/([a-zA-Z0-9.-]+\/[a-zA-Z0-9.-]+)/);
+        if (match) {
+            selectedModel = match[1];
         }
-      };
-
-      const config = categoryConfigs[category];
-      let topModels = await this.fetchTopModels('text-generation', config.search);
-      if (topModels.length === 0 && config.search) {
-        topModels = await this.fetchTopModels('text-generation'); // fallback if search finds 0
+      } catch (e) {
+        console.warn('Agent routing failed, using default', e);
       }
       
-      const modelsToTry = [...new Set([...config.fallbacks, ...topModels])];
+      const efficientFallbacks = [
+        selectedModel,
+        'meta-llama/Meta-Llama-3-8B-Instruct',
+        'google/gemma-2-9b-it',
+        'Qwen/Qwen2.5-Coder-7B-Instruct',
+        'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'
+      ];
+      
+      const modelsToTry = [...new Set(efficientFallbacks)];
 
       for (const model of modelsToTry) {
         try {
-          const res = await attemptInference(model, 1500);
+          const res = await attemptInference(model, 1000);
           if (res) return res;
         } catch (error: any) {
           if (error.message === 'CREDIT_DEPLETION') {
-            return "[SYSTEM_ERROR_CREDITS] You have depleted your Hugging Face API credits. Please update your API key in settings or subscribe to PRO on Hugging Face to continue chatting.";
+            return "[SYSTEM_ERROR_CREDITS] You have depleted your AadityaLabs AI API credits. Please update your API key in settings or subscribe to PRO on AadityaLabs AI to continue chatting.";
           }
           console.error(`Model ${model} failed:`, finalError);
         }
@@ -359,7 +342,7 @@ ${platformSpecificInstructions}
         return await this.generateText(llmPrompt, []);
       }
       
-      return `👁️ Here is what I see in the image: ${caption}`;
+      return `Image analysis complete: ${caption}`;
     });
   }
 }

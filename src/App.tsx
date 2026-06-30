@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Home, Plus, CheckSquare, Calendar, Folder, Users, 
+  Plus, CheckSquare, Folder, 
   Settings, Bell, Search, Sparkles, X, 
   Mic, MicOff, Volume2, ArrowUp, Loader2, 
   MessageSquare, FileText, Lock, Globe, Image as ImageIcon,
-  MoreHorizontal, ChevronDown, ListTodo, Presentation, PlayCircle,
-  Video, Clock, FileWarning, ArrowRight, History, User,
-  CheckCircle2, Circle, UploadCloud
+  Video, User, Bot
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -139,7 +137,7 @@ const InputAccessory = ({ onUpload }: { onUpload: (file: File) => void }) => {
 }
 
 export default function App() {
-  type Page = 'home' | 'tasks' | 'meetings' | 'files' | 'shared' | 'settings';
+  type Page = 'home' | 'settings';
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [user, setUser] = useState<UserData | null>(null);
   const [needsWebLogin, setNeedsWebLogin] = useState(false);
@@ -376,7 +374,7 @@ export default function App() {
     setAttachment(null);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setIsLoading(true);
-    setStatusMessage('🤔 Thinking...');
+    setStatusMessage('Analyzing request...');
 
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }));
@@ -685,25 +683,10 @@ export default function App() {
         </div>
 
         {/* Primary Nav */}
-        <div className="px-3 py-2 space-y-1">
-           <button onClick={() => { startNewChat(); }} className={cn("w-full flex items-center justify-between px-3 py-2 rounded-xl font-semibold text-sm transition-all group", currentPage === 'home' ? "bg-blue-50 text-blue-700" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700 font-medium")}>
-             <div className="flex items-center gap-3"><Home className={cn("w-[18px] h-[18px]", currentPage === 'home' ? "text-blue-600" : "")} /> Home</div>
-           </button>
-           <button onClick={() => { startNewChat(); }} className="w-full flex items-center justify-between px-3 py-2 text-neutral-500 hover:bg-black/5 hover:text-neutral-700 rounded-xl font-medium text-sm transition-all group">
-             <div className="flex items-center gap-3"><MessageSquare className="w-[18px] h-[18px]" /> New Chat</div>
-             <Plus className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-           </button>
-           <button onClick={() => navigate('tasks')} className={cn("w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all group", currentPage === 'tasks' ? "bg-blue-50 text-blue-700 font-semibold" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700 font-medium")}>
-             <div className="flex items-center gap-3"><CheckSquare className={cn("w-[18px] h-[18px]", currentPage === 'tasks' ? "text-blue-600" : "")} /> My Tasks</div>
-           </button>
-           <button onClick={() => navigate('meetings')} className={cn("w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all group", currentPage === 'meetings' ? "bg-blue-50 text-blue-700 font-semibold" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700 font-medium")}>
-             <div className="flex items-center gap-3"><Calendar className={cn("w-[18px] h-[18px]", currentPage === 'meetings' ? "text-blue-600" : "")} /> My Meetings</div>
-           </button>
-           <button onClick={() => navigate('files')} className={cn("w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all group", currentPage === 'files' ? "bg-blue-50 text-blue-700 font-semibold" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700 font-medium")}>
-             <div className="flex items-center gap-3"><Folder className={cn("w-[18px] h-[18px]", currentPage === 'files' ? "text-blue-600" : "")} /> Saved Files</div>
-           </button>
-           <button onClick={() => navigate('shared')} className={cn("w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all group", currentPage === 'shared' ? "bg-blue-50 text-blue-700 font-semibold" : "text-neutral-500 hover:bg-black/5 hover:text-neutral-700 font-medium")}>
-             <div className="flex items-center gap-3"><Users className={cn("w-[18px] h-[18px]", currentPage === 'shared' ? "text-blue-600" : "")} /> Shared with me</div>
+        <div className="px-3 py-2 space-y-1 mt-2">
+           <button onClick={() => { startNewChat(); }} className="w-full flex items-center justify-between px-3 py-2.5 bg-neutral-900 hover:bg-black text-white rounded-xl font-medium text-sm transition-all group shadow-sm">
+             <div className="flex items-center gap-3"><Plus className="w-[18px] h-[18px]" /> New Chat</div>
+             <MessageSquare className="w-4 h-4 opacity-70" />
            </button>
         </div>
 
@@ -779,137 +762,52 @@ export default function App() {
            
           {messages.length === 0 ? (
             // Modern Dashboard Layout
-            <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} className="w-full max-w-[900px] mx-auto pt-12 md:pt-20 pb-10 flex flex-col items-start h-full">
+            <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} className="w-full max-w-[900px] mx-auto pt-12 md:pt-32 pb-10 flex flex-col items-center justify-center h-full text-center">
               
-              <div className="mb-10 w-full">
-                <h1 className="text-5xl md:text-6xl font-display font-bold tracking-tight text-neutral-800 mb-2 flex items-center gap-3">
-                  <span className="relative inline-block">
-                    <span className="relative z-10">Welcome, {user.name.split(' ')[0]}!</span>
-                    <span className="absolute bottom-1 left-0 w-full h-5 bg-blue-100 -z-0 rounded-sm"></span>
-                  </span>
-                  👋
-                </h1>
-                <h2 className="text-3xl md:text-4xl text-neutral-400 font-medium font-display mt-2">
+              <div className="mb-10 w-full flex flex-col items-center">
+                <div className="w-16 h-16 bg-white border border-neutral-200 shadow-sm rounded-2xl flex items-center justify-center mb-6">
+                   <BrandingLogo className="w-8 h-8" />
+                </div>
+                <h2 className="text-3xl md:text-4xl text-neutral-800 font-semibold font-display mb-2">
                   How can I help you today?
                 </h2>
               </div>
 
               {/* Grid Layout */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl mb-8">
                 
-                {/* Previously viewed files */}
-                <div className="md:col-span-2 bg-white rounded-3xl border border-neutral-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-2 mb-4 text-neutral-500 font-medium text-sm">
-                    <FileText className="w-4 h-4" /> Previously viewed files
-                  </div>
-                  <div className="space-y-3">
-                    <button onClick={() => handleSend("Analyze Miro - Product Analytics and Statistics")} className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
-                      <div className="w-8 h-8 rounded bg-yellow-100 flex items-center justify-center shrink-0">
-                        <span className="text-yellow-600 font-bold text-xs">M</span>
-                      </div>
-                      <span className="font-medium text-neutral-700 truncate group-hover:text-blue-600">Miro - Product Analytics and Statistics</span>
-                    </button>
-                    <button onClick={() => handleSend("Analyze Figma - UX Research")} className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
-                      <div className="w-8 h-8 rounded bg-purple-100 flex items-center justify-center shrink-0">
-                        <span className="text-purple-600 font-bold text-xs">F</span>
-                      </div>
-                      <span className="font-medium text-neutral-700 truncate group-hover:text-blue-600">Figma - UX Research</span>
-                    </button>
-                    <button onClick={() => handleSend("Analyze R2 Strategic Goals & Objectives.pdf")} className="flex items-center gap-3 w-full p-2 hover:bg-neutral-50 rounded-xl transition-colors text-left group">
-                      <div className="w-8 h-8 rounded bg-red-100 flex items-center justify-center shrink-0">
-                        <span className="text-red-600 font-bold text-xs">P</span>
-                      </div>
-                      <span className="font-medium text-neutral-700 truncate group-hover:text-blue-600">R2 Strategic Goals & Objectives.pdf</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Summarize meeting */}
-                <div className="bg-white rounded-3xl border border-neutral-100 p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col cursor-pointer" onClick={() => handleSend("Summarize my last meeting")}>
-                  <div className="flex items-center gap-2 mb-4 text-neutral-500 font-medium text-sm">
-                    <Sparkles className="w-4 h-4" /> Summarize your last meeting
-                  </div>
-                  <div className="flex gap-4 items-center mt-2">
-                    <div className="w-12 h-12 rounded-2xl bg-neutral-100 overflow-hidden shrink-0">
-                      <img src="https://ui-avatars.com/api/?name=UX&background=random" alt="Meeting" className="w-full h-full object-cover" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-neutral-800 text-lg">UX Strategy Meet up</h3>
-                      <p className="text-sm text-neutral-400 mt-1">1 Apr 2025, 14:00 pm</p>
+                <button onClick={() => handleSend("Brainstorm ideas for a new marketing campaign")} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm hover:border-blue-300 hover:shadow-md transition-all flex flex-col text-left group cursor-pointer duration-300">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 text-neutral-600 font-medium text-sm group-hover:text-blue-600 transition-colors">
+                      <Sparkles className="w-4 h-4" /> Brainstorming
                     </div>
                   </div>
-                </div>
-
-                {/* Suggested Tasks */}
-                <button onClick={() => handleSend("Help me conduct UX Research")} className="bg-white rounded-3xl border border-neutral-100 p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col text-left hover:border-blue-200">
-                  <div className="flex items-center gap-2 mb-2 text-neutral-400 font-medium text-sm">
-                    <CheckSquare className="w-4 h-4" /> Suggested Task
-                  </div>
-                  <h3 className="font-semibold text-neutral-800 text-xl mt-1">Conduct UX Research</h3>
-                </button>
-                <button onClick={() => handleSend("Write a prospect email")} className="md:col-span-2 bg-white rounded-3xl border border-neutral-100 p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col text-left hover:border-blue-200">
-                  <div className="flex items-center gap-2 mb-2 text-neutral-400 font-medium text-sm">
-                    <CheckSquare className="w-4 h-4" /> Suggested Task
-                  </div>
-                  <h3 className="font-semibold text-neutral-800 text-xl mt-1">Write a prospect email</h3>
+                  <h3 className="text-neutral-500 text-sm group-hover:text-neutral-700">Ideas for a new marketing campaign</h3>
                 </button>
 
-              </div>
-
-              {/* Tasks List Section */}
-              <div className="w-full mt-4">
-                <div className="flex items-center justify-between mb-4 px-2">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-xl font-bold text-neutral-800 flex items-center gap-2">
-                      <ListTodo className="w-5 h-5 text-neutral-700" /> My Tasks
-                      <span className="text-sm font-medium text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded-full">13</span>
-                    </h3>
-                    <div className="hidden sm:flex items-center bg-white border border-neutral-200 rounded-full px-3 py-1.5 shadow-sm">
-                      <Search className="w-4 h-4 text-neutral-400 mr-2" />
-                      <input type="text" placeholder="Search for name..." className="bg-transparent text-sm focus:outline-none w-32 placeholder:text-neutral-400" />
-                    </div>
+                <button onClick={() => handleSend("Explain quantum computing to a 5-year-old")} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm hover:border-green-300 hover:shadow-md transition-all flex flex-col text-left group cursor-pointer duration-300">
+                  <div className="flex items-center gap-2 text-neutral-600 font-medium text-sm mb-2 group-hover:text-green-600 transition-colors">
+                    <MessageSquare className="w-4 h-4" /> Explain concept
                   </div>
-                  <button onClick={() => handleSend("Prioritize my tasks")} className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-600 hover:bg-purple-100 rounded-xl text-sm font-semibold transition-colors border border-purple-100 shadow-sm">
-                    <Sparkles className="w-4 h-4" /> Prioritize Tasks
-                  </button>
-                </div>
+                  <h3 className="text-neutral-500 text-sm group-hover:text-neutral-700">Quantum computing to a 5-year-old</h3>
+                </button>
 
-                <div className="bg-white border border-neutral-100 shadow-sm rounded-3xl overflow-hidden p-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-3 p-3 hover:bg-neutral-50 rounded-2xl group transition-colors cursor-pointer">
-                      <Circle className="w-5 h-5 text-neutral-300 group-hover:text-neutral-400" />
-                      <span className="font-medium text-neutral-800 flex-1">Design Meeting</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-neutral-500 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> 2 pm</span>
-                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Join now</span>
-                      </div>
+                <button onClick={() => handleSend("Write a Python script to scrape a website")} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm hover:border-purple-300 hover:shadow-md transition-all flex flex-col text-left group cursor-pointer duration-300">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 text-neutral-600 font-medium text-sm group-hover:text-purple-600 transition-colors">
+                      <FileText className="w-4 h-4" /> Code generation
                     </div>
-                    <div className="flex items-center gap-3 p-3 hover:bg-neutral-50 rounded-2xl group transition-colors cursor-pointer">
-                      <Circle className="w-5 h-5 text-neutral-300 group-hover:text-neutral-400" />
-                      <span className="font-medium text-neutral-800 flex-1">Refine UI components based on user feedback</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg flex items-center gap-1"><FileWarning className="w-3 h-3" /> Urgent</span>
-                        <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg">By today</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 hover:bg-neutral-50 rounded-2xl group transition-colors cursor-pointer">
-                      <Circle className="w-5 h-5 text-neutral-300 group-hover:text-neutral-400" />
-                      <span className="font-medium text-neutral-800 flex-1">Prepare a prototype for usability testing</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg flex items-center gap-1"><Loader2 className="w-3 h-3" /> In progress</span>
-                        <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-lg">By tomorrow</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 hover:bg-neutral-50 rounded-2xl group transition-colors cursor-pointer">
-                      <Circle className="w-5 h-5 text-neutral-300 group-hover:text-neutral-400" />
-                      <span className="font-medium text-neutral-800 flex-1">Collaborate with developers on implementation detail</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-neutral-500 bg-neutral-100 px-2.5 py-1 rounded-lg border border-neutral-200">To do</span>
-                        <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-lg">By tomorrow</span>
-                      </div>
-                    </div>
+                    <Bot className="w-3.5 h-3.5 text-neutral-300 group-hover:text-purple-400 transition-colors" />
                   </div>
-                </div>
+                  <h3 className="text-neutral-500 text-sm group-hover:text-neutral-700">Python script to scrape a website</h3>
+                </button>
+
+                <button onClick={() => handleSend("Help me plan a 5-day trip to Tokyo")} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm hover:border-orange-300 hover:shadow-md transition-all flex flex-col text-left group cursor-pointer duration-300">
+                  <div className="flex items-center gap-2 text-neutral-600 font-medium text-sm mb-2 group-hover:text-orange-600 transition-colors">
+                    <Globe className="w-4 h-4" /> Trip planning
+                  </div>
+                  <h3 className="text-neutral-500 text-sm group-hover:text-neutral-700">Plan a 5-day trip to Tokyo</h3>
+                </button>
               </div>
 
             </motion.div>
@@ -951,7 +849,8 @@ export default function App() {
                                <div key={i} className="inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-semibold text-neutral-600 shadow-sm mr-2">
                                  {action.type === 'message' && !action.url && (
                                    <span className="flex items-center gap-2">
-                                     {action.text?.includes('Generating') ? <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" /> : <Sparkles className="w-3.5 h-3.5 text-blue-500" />}
+                                     {action.text?.includes('Generating') ? <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" /> : 
+                                      action.text?.includes('Dynamically selected model') ? <Bot className="w-4 h-4 text-purple-600" /> : <Sparkles className="w-3.5 h-3.5 text-blue-500" />}
                                      {action.text}
                                    </span>
                                  )}
@@ -1088,187 +987,10 @@ export default function App() {
           </div>
         </div>
           </>
-        ) : currentPage === 'tasks' ? (
-          <TasksView onAction={(task: string) => {
-            startNewChat();
-            setTimeout(() => handleSend(`I need help with this task: ${task}`), 100);
-          }} />
-        ) : currentPage === 'meetings' ? (
-          <MeetingsView onViewSummary={() => {
-            startNewChat();
-            setTimeout(() => handleSend("Summarize the Weekly Design Crit meeting from yesterday"), 100);
-          }} />
-        ) : currentPage === 'files' ? (
-          <FilesView onAction={(file: string) => {
-            startNewChat();
-            setTimeout(() => handleSend(`Analyze the file: ${file}`), 100);
-          }} />
-        ) : currentPage === 'shared' ? (
-          <SharedView onAction={(file: string) => {
-            startNewChat();
-            setTimeout(() => handleSend(`What are the key points in the shared document: ${file}?`), 100);
-          }} />
         ) : currentPage === 'settings' ? (
           <SettingsView user={user} setAuthApiKey={setAuthApiKey} setNeedsWebLogin={setNeedsWebLogin} setUser={setUser} navigate={navigate} />
         ) : null}
 
-      </div>
-    </div>
-  );
-}
-
-function TasksView({ onAction }: any) {
-  return (
-    <div className="flex-1 w-full h-full bg-[#fcfcfd] p-8 md:p-12 overflow-y-auto">
-      <h2 className="text-3xl font-display font-bold text-neutral-800 mb-6">My Tasks</h2>
-      <div className="bg-white rounded-3xl border border-neutral-200 p-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4 pb-4 border-b border-neutral-100">
-          <div className="flex items-center gap-4 flex-1">
-            <input type="checkbox" className="w-5 h-5 rounded border-neutral-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-            <div>
-              <h4 className="font-semibold text-neutral-800">Review Q3 Marketing Strategy</h4>
-              <p className="text-sm text-neutral-500">Due today • Assigned by Sarah</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-             <span className="px-3 py-1 bg-red-50 text-red-600 text-xs font-semibold rounded-full">High Priority</span>
-             <button onClick={() => onAction("Review Q3 Marketing Strategy")} className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-colors">Ask AI</button>
-          </div>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4 pb-4 border-b border-neutral-100">
-          <div className="flex items-center gap-4 flex-1">
-            <input type="checkbox" className="w-5 h-5 rounded border-neutral-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-            <div>
-              <h4 className="font-semibold text-neutral-800">Approve new logo assets</h4>
-              <p className="text-sm text-neutral-500">Due tomorrow • Design Team</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-             <span className="px-3 py-1 bg-neutral-100 text-neutral-600 text-xs font-semibold rounded-full">Normal</span>
-             <button onClick={() => onAction("Approve new logo assets")} className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold rounded-lg transition-colors">Ask AI</button>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <input type="checkbox" defaultChecked className="w-5 h-5 rounded border-neutral-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-          <div className="flex-1">
-            <h4 className="font-semibold text-neutral-400 line-through">Weekly Sync Notes</h4>
-            <p className="text-sm text-neutral-400">Completed yesterday</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MeetingsView({ onViewSummary }: any) {
-  return (
-    <div className="flex-1 w-full h-full bg-[#fcfcfd] p-8 md:p-12 overflow-y-auto">
-      <h2 className="text-3xl font-display font-bold text-neutral-800 mb-6">My Meetings</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-3xl border border-neutral-200 p-6 shadow-sm flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg uppercase tracking-wider">Upcoming</span>
-            <span className="text-sm font-medium text-neutral-500">10:00 AM - 11:00 AM</span>
-          </div>
-          <h3 className="text-xl font-semibold text-neutral-800 mt-2">Product Alignment Sync</h3>
-          <p className="text-neutral-500 text-sm flex-1">Discussing the roadmap for Q4 with the engineering and design leads.</p>
-          <div className="mt-4 flex gap-2">
-             <button className="flex-1 py-2 bg-neutral-900 text-white rounded-xl text-sm font-semibold hover:bg-black transition-colors">Join Call</button>
-             <button className="px-4 py-2 bg-neutral-100 text-neutral-600 rounded-xl text-sm font-semibold hover:bg-neutral-200 transition-colors">Reschedule</button>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-3xl border border-neutral-200 p-6 shadow-sm flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="px-3 py-1 bg-neutral-100 text-neutral-600 text-xs font-bold rounded-lg uppercase tracking-wider">Past</span>
-            <span className="text-sm font-medium text-neutral-400">Yesterday</span>
-          </div>
-          <h3 className="text-xl font-semibold text-neutral-800 mt-2">Weekly Design Crit</h3>
-          <p className="text-neutral-500 text-sm flex-1">Reviewing the new dashboard mockups.</p>
-          <div className="mt-4">
-             <button onClick={onViewSummary} className="w-full py-2 bg-blue-50 text-blue-600 rounded-xl text-sm font-semibold hover:bg-blue-100 transition-colors">View AI Summary</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FilesView({ onAction }: any) {
-  return (
-    <div className="flex-1 w-full h-full bg-[#fcfcfd] p-8 md:p-12 overflow-y-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-3xl font-display font-bold text-neutral-800">Saved Files</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Upload
-        </button>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { name: "Q3_Report.pdf", type: "PDF", color: "bg-red-100 text-red-600" },
-          { name: "Logo_Assets.zip", type: "ZIP", color: "bg-neutral-100 text-neutral-600" },
-          { name: "Meeting_Recording.mp4", type: "VIDEO", color: "bg-blue-100 text-blue-600" },
-          { name: "Financials_2024.xlsx", type: "EXCEL", color: "bg-green-100 text-green-600" },
-        ].map((file, i) => (
-          <div onClick={() => onAction(file.name)} key={i} className="bg-white rounded-2xl border border-neutral-200 p-5 shadow-sm hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group flex flex-col items-start relative">
-             <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-               <button className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg">
-                 <Sparkles className="w-3.5 h-3.5" />
-               </button>
-             </div>
-             <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4", file.color)}>
-               <span className="font-bold text-xs">{file.type}</span>
-             </div>
-             <h4 className="font-semibold text-neutral-800 text-sm truncate w-full group-hover:text-blue-600">{file.name}</h4>
-             <p className="text-xs text-neutral-400 mt-1">2 days ago</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SharedView({ onAction }: any) {
-  return (
-    <div className="flex-1 w-full h-full bg-[#fcfcfd] p-8 md:p-12 overflow-y-auto">
-      <h2 className="text-3xl font-display font-bold text-neutral-800 mb-6">Shared with me</h2>
-      <div className="bg-white rounded-3xl border border-neutral-200 overflow-hidden shadow-sm">
-         <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-neutral-500 font-semibold border-b border-neutral-200">
-              <tr>
-                <th className="px-6 py-4">Name</th>
-                <th className="px-6 py-4 hidden sm:table-cell">Shared by</th>
-                <th className="px-6 py-4 hidden sm:table-cell">Date</th>
-                <th className="px-6 py-4 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100 text-neutral-700">
-              <tr className="hover:bg-neutral-50 transition-colors group">
-                <td className="px-6 py-4 font-medium flex items-center gap-3"><Folder className="w-4 h-4 text-blue-500 shrink-0" /> <span className="truncate">Project Alpha Specs</span></td>
-                <td className="px-6 py-4 hidden sm:table-cell">Alice Cooper</td>
-                <td className="px-6 py-4 text-neutral-400 hidden sm:table-cell">Oct 24, 2024</td>
-                <td className="px-6 py-4 text-right">
-                  <button onClick={() => onAction("Project Alpha Specs")} className="px-3 py-1.5 bg-neutral-100 text-neutral-600 group-hover:bg-blue-50 group-hover:text-blue-600 text-xs font-semibold rounded-lg transition-colors">Ask AI</button>
-                </td>
-              </tr>
-              <tr className="hover:bg-neutral-50 transition-colors group">
-                <td className="px-6 py-4 font-medium flex items-center gap-3"><FileText className="w-4 h-4 text-neutral-400 shrink-0" /> <span className="truncate">Branding Guidelines</span></td>
-                <td className="px-6 py-4 hidden sm:table-cell">Design Team</td>
-                <td className="px-6 py-4 text-neutral-400 hidden sm:table-cell">Oct 20, 2024</td>
-                <td className="px-6 py-4 text-right">
-                  <button onClick={() => onAction("Branding Guidelines")} className="px-3 py-1.5 bg-neutral-100 text-neutral-600 group-hover:bg-blue-50 group-hover:text-blue-600 text-xs font-semibold rounded-lg transition-colors">Ask AI</button>
-                </td>
-              </tr>
-              <tr className="hover:bg-neutral-50 transition-colors group">
-                <td className="px-6 py-4 font-medium flex items-center gap-3"><FileText className="w-4 h-4 text-neutral-400 shrink-0" /> <span className="truncate">Q4 Budget</span></td>
-                <td className="px-6 py-4 hidden sm:table-cell">Finance</td>
-                <td className="px-6 py-4 text-neutral-400 hidden sm:table-cell">Oct 15, 2024</td>
-                <td className="px-6 py-4 text-right">
-                  <button onClick={() => onAction("Q4 Budget")} className="px-3 py-1.5 bg-neutral-100 text-neutral-600 group-hover:bg-blue-50 group-hover:text-blue-600 text-xs font-semibold rounded-lg transition-colors">Ask AI</button>
-                </td>
-              </tr>
-            </tbody>
-         </table>
       </div>
     </div>
   );
