@@ -305,6 +305,10 @@ export async function handleDocumentMessage(bot: TelegramBot, msg: TelegramBot.M
         }
 
         const truncatedText = extractedText.substring(0, 15000); // Limit context size
+        
+        const { redisCache } = await import('../../lib/redis');
+        await redisCache.set(`user_file_${userId}_${doc.file_name}`, { name: doc.file_name, content: truncatedText }, 3600); // 1 hour memory
+        
         const prompt = `I have uploaded a file named "${doc.file_name}". Here is its content:\n\n${truncatedText}\n\nPlease analyze this file and tell me what it is about, or answer my next questions about it.`;
         
         await addMessage(userId, 'user', `[Uploaded File: ${doc.file_name}]`);

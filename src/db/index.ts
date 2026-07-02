@@ -42,6 +42,7 @@ export async function getUser(telegramId: string | number, firstName?: string, u
       photo_url: photoUrl || null,
       hf_api_key: null,
       previous_api_keys: [],
+      plan: 'free',
       active_topic_id: `topic_${Date.now()}`,
       created_at: new Date()
     };
@@ -75,6 +76,7 @@ export async function getUser(telegramId: string | number, firstName?: string, u
     hfApiKey: user.hf_api_key,
     name: user.name,
     photoUrl: user.photo_url,
+    plan: user.plan || 'free',
     activeTopicId: user.active_topic_id,
     memory: user.memory
   };
@@ -98,6 +100,7 @@ export async function getUserByUsernameOrId(identifier: string) {
       id: user._id.toString(),
       hfApiKey: user.hf_api_key,
       name: user.name,
+      plan: user.plan || 'free',
       memory: user.memory
     };
   }
@@ -140,6 +143,7 @@ export async function registerOrUpdateUserWeb(identifier: string, apiKey: string
       username: isNumeric ? '' : cleanIdentifier,
       hf_api_key: apiKey,
       previous_api_keys: [],
+      plan: 'free',
       created_at: new Date()
     };
     const result = await db.collection('users').insertOne(newUser);
@@ -148,6 +152,7 @@ export async function registerOrUpdateUserWeb(identifier: string, apiKey: string
       _id: result.insertedId,
       id: result.insertedId.toString(),
       hfApiKey: newUser.hf_api_key,
+      plan: newUser.plan || 'free',
       memory: undefined
     };
   }

@@ -196,10 +196,20 @@ async function startServer() {
                  }
                }
              }
-             finalMessage = `[Uploaded ZIP: ${attachment.name}]\nContents:\n${extracted.substring(0, 15000)}\n\nUser's prompt: ${message}`;
+             const truncated = extracted.substring(0, 15000);
+             finalMessage = `[Uploaded ZIP: ${attachment.name}]\nContents:\n${truncated}\n\nUser's prompt: ${message}`;
+             if (userId) {
+               const { redisCache } = await import('./src/lib/redis');
+               await redisCache.set(`user_file_${userId}_${attachment.name}`, { name: attachment.name, content: truncated }, 3600);
+             }
           } else {
              const text = buffer.toString('utf8');
-             finalMessage = `[Uploaded File: ${attachment.name}]\nContent:\n${text.substring(0, 15000)}\n\nUser's prompt: ${message}`;
+             const truncated = text.substring(0, 15000);
+             finalMessage = `[Uploaded File: ${attachment.name}]\nContent:\n${truncated}\n\nUser's prompt: ${message}`;
+             if (userId) {
+               const { redisCache } = await import('./src/lib/redis');
+               await redisCache.set(`user_file_${userId}_${attachment.name}`, { name: attachment.name, content: truncated }, 3600);
+             }
           }
         } catch (e: any) {
           console.error('File parsing error:', e);
@@ -207,11 +217,13 @@ async function startServer() {
         }
       }
 
+      let plan = 'free';
       if (userId) {
         await addMessage(userId, 'user', finalMessage, topicId);
         const user = await getUserByUsernameOrId(userId);
-        if (user && user.memory) {
-          userMemory = user.memory;
+        if (user) {
+          if (user.memory) userMemory = user.memory;
+          if (user.plan) plan = user.plan;
         }
       }
       
@@ -219,7 +231,7 @@ async function startServer() {
         res.write(`data: ${JSON.stringify({ type: 'status', status })}\n\n`);
       };
 
-      const result = await AgentService.processWebMessage(ai, finalMessage, history || [], userName || 'User', userId, userMemory, onStatus);
+      const result = await AgentService.processWebMessage(ai, finalMessage, history || [], userName || 'User', userId, userMemory, onStatus, plan);
       
       if (userId) {
         await addMessage(userId, 'assistant', result.response, topicId);

@@ -14,6 +14,7 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from './lib/utils';
 import { BrandingLogo } from './components/Logo';
+import { CodeBlock } from './components/CodeBlock';
 
 interface Message {
   id: string;
@@ -128,7 +129,7 @@ const InputAccessory = ({ onUpload }: { onUpload: (file: File) => void }) => {
 
       <button 
         onClick={() => setOpen(true)} 
-        className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700"
+        className="w-10 h-10 mb-0.5 rounded-full flex items-center justify-center transition-all duration-300 bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-800"
       >
         <Plus className="w-5 h-5" />
       </button>
@@ -762,85 +763,86 @@ export default function App() {
            
           {messages.length === 0 ? (
             // Modern Dashboard Layout
-            <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} className="w-full max-w-[900px] mx-auto pt-12 md:pt-32 pb-10 flex flex-col items-center justify-center h-full text-center">
+            <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} className="w-full max-w-[900px] mx-auto pt-20 md:pt-32 pb-10 flex flex-col items-center justify-center h-full text-center">
               
-              <div className="mb-10 w-full flex flex-col items-center">
-                <div className="w-16 h-16 bg-white border border-neutral-200 shadow-sm rounded-2xl flex items-center justify-center mb-6">
-                   <BrandingLogo className="w-8 h-8" />
-                </div>
-                <h2 className="text-3xl md:text-4xl text-neutral-800 font-semibold font-display mb-2">
-                  How can I help you today?
+              <div className="mb-12 w-full flex flex-col items-center">
+                <h2 className="text-3xl md:text-4xl text-neutral-800 font-semibold mb-2 tracking-tight">
+                  Hi, {user?.name?.split(' ')[0] || 'there'}
                 </h2>
+                <p className="text-xl text-neutral-500 font-medium">How can I help you today?</p>
               </div>
 
               {/* Grid Layout */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl mb-8 px-4">
                 
-                <button onClick={() => handleSend("Brainstorm ideas for a new marketing campaign")} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm hover:border-blue-300 hover:shadow-md transition-all flex flex-col text-left group cursor-pointer duration-300">
+                <button onClick={() => handleSend("Brainstorm ideas for a new marketing campaign")} className="bg-white rounded-2xl border border-neutral-200/60 p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:bg-neutral-50 hover:shadow-[0_4px_15px_rgba(0,0,0,0.04)] transition-all flex flex-col text-left group cursor-pointer duration-300">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 text-neutral-600 font-medium text-sm group-hover:text-blue-600 transition-colors">
+                    <div className="flex items-center gap-2 text-neutral-800 font-medium text-sm group-hover:text-blue-600 transition-colors">
                       <Sparkles className="w-4 h-4" /> Brainstorming
                     </div>
                   </div>
-                  <h3 className="text-neutral-500 text-sm group-hover:text-neutral-700">Ideas for a new marketing campaign</h3>
+                  <h3 className="text-neutral-500 text-sm font-medium">Ideas for a new marketing campaign</h3>
                 </button>
 
-                <button onClick={() => handleSend("Explain quantum computing to a 5-year-old")} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm hover:border-green-300 hover:shadow-md transition-all flex flex-col text-left group cursor-pointer duration-300">
-                  <div className="flex items-center gap-2 text-neutral-600 font-medium text-sm mb-2 group-hover:text-green-600 transition-colors">
+                <button onClick={() => handleSend("Explain quantum computing to a 5-year-old")} className="bg-white rounded-2xl border border-neutral-200/60 p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:bg-neutral-50 hover:shadow-[0_4px_15px_rgba(0,0,0,0.04)] transition-all flex flex-col text-left group cursor-pointer duration-300">
+                  <div className="flex items-center gap-2 text-neutral-800 font-medium text-sm mb-2 group-hover:text-green-600 transition-colors">
                     <MessageSquare className="w-4 h-4" /> Explain concept
                   </div>
-                  <h3 className="text-neutral-500 text-sm group-hover:text-neutral-700">Quantum computing to a 5-year-old</h3>
+                  <h3 className="text-neutral-500 text-sm font-medium">Quantum computing to a 5-year-old</h3>
                 </button>
 
-                <button onClick={() => handleSend("Write a Python script to scrape a website")} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm hover:border-purple-300 hover:shadow-md transition-all flex flex-col text-left group cursor-pointer duration-300">
+                <button onClick={() => handleSend("Write a Python script to scrape a website")} className="bg-white rounded-2xl border border-neutral-200/60 p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:bg-neutral-50 hover:shadow-[0_4px_15px_rgba(0,0,0,0.04)] transition-all flex flex-col text-left group cursor-pointer duration-300">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 text-neutral-600 font-medium text-sm group-hover:text-purple-600 transition-colors">
+                    <div className="flex items-center gap-2 text-neutral-800 font-medium text-sm group-hover:text-purple-600 transition-colors">
                       <FileText className="w-4 h-4" /> Code generation
                     </div>
                     <Bot className="w-3.5 h-3.5 text-neutral-300 group-hover:text-purple-400 transition-colors" />
                   </div>
-                  <h3 className="text-neutral-500 text-sm group-hover:text-neutral-700">Python script to scrape a website</h3>
+                  <h3 className="text-neutral-500 text-sm font-medium">Python script to scrape a website</h3>
                 </button>
 
-                <button onClick={() => handleSend("Help me plan a 5-day trip to Tokyo")} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm hover:border-orange-300 hover:shadow-md transition-all flex flex-col text-left group cursor-pointer duration-300">
-                  <div className="flex items-center gap-2 text-neutral-600 font-medium text-sm mb-2 group-hover:text-orange-600 transition-colors">
+                <button onClick={() => handleSend("Help me plan a 5-day trip to Tokyo")} className="bg-white rounded-2xl border border-neutral-200/60 p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:bg-neutral-50 hover:shadow-[0_4px_15px_rgba(0,0,0,0.04)] transition-all flex flex-col text-left group cursor-pointer duration-300">
+                  <div className="flex items-center gap-2 text-neutral-800 font-medium text-sm mb-2 group-hover:text-orange-600 transition-colors">
                     <Globe className="w-4 h-4" /> Trip planning
                   </div>
-                  <h3 className="text-neutral-500 text-sm group-hover:text-neutral-700">Plan a 5-day trip to Tokyo</h3>
+                  <h3 className="text-neutral-500 text-sm font-medium">Plan a 5-day trip to Tokyo</h3>
                 </button>
               </div>
 
             </motion.div>
           ) : (
             // Active Chat State
-            <div className="w-full max-w-4xl mx-auto space-y-8 pt-10 pb-20">
+            <div className="w-full max-w-3xl mx-auto space-y-10 pt-10 pb-32">
                {messages.map((msg, idx) => (
                   <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     key={msg.id} 
                     className={cn(
-                      "flex gap-4 w-full",
+                      "flex gap-4 w-full group",
                       msg.role === 'user' ? "flex-row-reverse" : "flex-row"
                     )}
                   >
-                    <div className="w-8 h-8 shrink-0 rounded-full overflow-hidden bg-white border border-neutral-200 shadow-sm flex items-center justify-center z-10 mt-1">
+                    <div className={cn(
+                      "w-8 h-8 shrink-0 rounded-full flex items-center justify-center z-10 mt-0.5",
+                      msg.role === 'user' ? "" : "border border-neutral-200/60 shadow-sm bg-white"
+                    )}>
                       {msg.role === 'user' ? (
-                        user?.photoUrl ? <img src={user.photoUrl} alt="User" /> : <User className="w-5 h-5 text-neutral-400" />
+                        user?.photoUrl ? <img src={user.photoUrl} alt="User" className="w-full h-full rounded-full object-cover" /> : null
                       ) : (
                         <BrandingLogo className="w-5 h-5 drop-shadow-sm" />
                       )}
                     </div>
                 
                     <div className={cn(
-                      "flex flex-col max-w-[85%] md:max-w-[75%]",
+                      "flex flex-col flex-1",
                       msg.role === 'user' ? "items-end" : "items-start"
                     )}>
                       <div className={cn(
-                        "px-5 py-4 text-[15px] leading-relaxed shadow-[0_2px_10px_rgba(0,0,0,0.03)]",
+                        "text-[15px] leading-relaxed",
                         msg.role === 'user' 
-                          ? "bg-[#1A1A1D] text-white rounded-[1.5rem] rounded-tr-[4px]" 
-                          : "bg-white text-neutral-800 rounded-[1.5rem] rounded-tl-[4px] border border-neutral-200/80"
+                          ? "bg-[#f4f4f5] text-neutral-900 rounded-[24px] px-5 py-2.5 max-w-[85%]" 
+                          : "bg-transparent text-neutral-900 w-full pt-1"
                       )}>
                         
                          {msg.role === 'assistant' && msg.actions && msg.actions.length > 0 && (
@@ -866,38 +868,29 @@ export default function App() {
                         )}
 
                         <div className={cn(
-                          "prose max-w-none font-medium text-[15px]",
+                          "prose max-w-none text-[15px]",
                           msg.role === 'user' 
-                            ? "prose-invert prose-p:leading-relaxed" 
-                            : "prose-neutral prose-p:leading-relaxed prose-pre:bg-neutral-900 prose-pre:text-white prose-pre:rounded-2xl prose-a:text-blue-600"
+                            ? "prose-neutral prose-p:leading-relaxed" 
+                            : "prose-neutral prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-a:text-blue-600 prose-headings:font-semibold"
                         )}>
                           <ReactMarkdown 
                             remarkPlugins={[remarkGfm]} 
                             rehypePlugins={[rehypeRaw]}
                             components={{
-                              code({ node, inline, className, children, ...props }: any) {
-                                const match = /language-(\w+)/.exec(className || '');
-                                return !inline && match ? (
-                                  <SyntaxHighlighter
-                                    style={oneDark}
-                                    language={match[1]}
-                                    PreTag="div"
-                                    className="rounded-xl my-4 text-sm !bg-[#1E1E1E]"
-                                    {...props}
-                                  >
-                                    {String(children).replace(/\n$/, '')}
-                                  </SyntaxHighlighter>
-                                ) : (
-                                  <code className="bg-neutral-100 text-neutral-800 px-1.5 py-0.5 rounded-md text-sm font-mono" {...props}>
-                                    {children}
-                                  </code>
-                                );
-                              }
+                              code: CodeBlock
                             }}
                           >
                             {msg.content || ''}
                           </ReactMarkdown>
                         </div>
+                        
+                        {msg.images && msg.images.length > 0 && (
+                          <div className="mt-4 flex flex-wrap gap-3">
+                            {msg.images.map((img, i) => (
+                              <img key={i} src={img} alt="Generated" className="rounded-2xl max-w-sm w-full object-cover shadow-sm border border-neutral-200" />
+                            ))}
+                          </div>
+                        )}
                         
                         {msg.role === 'assistant' && (
                           <div className="mt-3 flex items-center justify-end">
@@ -922,17 +915,17 @@ export default function App() {
                ))}
                
                {isLoading && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4">
-                    <div className="w-8 h-8 shrink-0 rounded-full bg-white border border-neutral-200 shadow-sm flex items-center justify-center mt-1 z-10">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4 w-full">
+                    <div className="w-8 h-8 shrink-0 rounded-full border border-neutral-200/60 shadow-sm bg-white flex items-center justify-center mt-0.5 z-10">
                       <BrandingLogo className="w-5 h-5 opacity-80" />
                     </div>
-                    <div className="bg-white border border-neutral-200/80 shadow-[0_2px_10px_rgba(0,0,0,0.03)] px-5 py-4 rounded-[1.5rem] rounded-tl-[4px] flex items-center gap-3">
-                      <div className="flex gap-1">
-                        <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                        <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                        <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    <div className="flex items-center gap-3 pt-1">
+                      <div className="flex gap-1.5 items-center justify-center h-8">
+                        <div className="w-1.5 h-1.5 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-1.5 h-1.5 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-1.5 h-1.5 bg-neutral-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                       </div>
-                      <span className="text-sm font-medium text-neutral-600 animate-pulse">{statusMessage}</span>
+                      <span className="text-[15px] font-medium text-neutral-500 animate-pulse">{statusMessage}</span>
                     </div>
                   </motion.div>
                )}
@@ -945,7 +938,7 @@ export default function App() {
         {/* Floating Input Area - Modern Pill Style */}
         <div className="absolute bottom-0 inset-x-0 pb-8 pt-12 px-4 w-full z-30 bg-gradient-to-t from-[#fcfcfd] via-[#fcfcfd]/90 to-transparent pointer-events-none flex flex-col items-center justify-end">
           
-          <div className="w-full max-w-[850px] pointer-events-auto bg-white rounded-full border border-neutral-200 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.08)] p-2 flex items-center gap-3 transition-all focus-within:shadow-[0_15px_50px_-10px_rgba(0,0,0,0.12)] focus-within:border-neutral-300">
+          <div className="w-full max-w-[850px] pointer-events-auto bg-white rounded-[28px] border border-neutral-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-2.5 flex items-end gap-3 transition-all focus-within:shadow-[0_8px_40px_rgb(0,0,0,0.08)] focus-within:border-neutral-300">
             <InputAccessory onUpload={handleFileUpload} />
             {attachment && (
               <div className="absolute bottom-[110%] left-6 bg-white border border-neutral-200 shadow-md rounded-xl px-3 py-1.5 flex items-center gap-2 text-sm">
@@ -961,15 +954,15 @@ export default function App() {
               value={input}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
-              placeholder="Ask or search for anything. Use @ to tag a file or collection."
-              className="flex-1 bg-transparent text-neutral-800 placeholder:text-neutral-400 focus:outline-none resize-none min-h-[26px] max-h-[150px] py-3 text-[15px] font-medium leading-relaxed"
+              placeholder="Ask anything... (Use @ to tag a file)"
+              className="flex-1 bg-transparent text-neutral-800 placeholder:text-neutral-400 focus:outline-none resize-none min-h-[40px] max-h-[150px] py-2.5 text-[15px] font-medium leading-relaxed custom-scrollbar"
               rows={1}
             />
             {input.trim() || attachment ? (
               <button
                 onClick={() => handleSend()}
                 disabled={isLoading}
-                className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 hover:bg-blue-700 transition-all shadow-[0_2px_8px_rgba(37,99,235,0.3)] active:scale-95 disabled:opacity-50"
+                className="w-10 h-10 mb-0.5 rounded-full bg-black text-white flex items-center justify-center shrink-0 hover:bg-neutral-800 transition-all shadow-sm active:scale-95 disabled:opacity-50"
               >
                 <ArrowUp className="w-5 h-5" />
               </button>
@@ -977,7 +970,7 @@ export default function App() {
               <button
                 onClick={toggleListening}
                 className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all shadow-[0_2px_8px_rgba(0,0,0,0.05)] active:scale-95",
+                  "w-10 h-10 mb-0.5 rounded-full flex items-center justify-center shrink-0 transition-all shadow-[0_2px_8px_rgba(0,0,0,0.05)] active:scale-95",
                   isListening ? "bg-red-500 text-white" : "bg-neutral-50 text-neutral-500 hover:bg-neutral-100"
                 )}
               >

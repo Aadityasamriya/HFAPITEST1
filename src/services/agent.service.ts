@@ -21,19 +21,25 @@ export class AgentService {
   /**
    * Shared Agentic Loop for Web API
    */
-  static async processWebMessage(ai: ModelManager, message: string, history: any[], userName: string, userId?: string | number, userMemory?: string, onStatus?: (status: string) => void): Promise<AgentResponse> {
+  static async processWebMessage(ai: ModelManager, message: string, history: any[], userName: string, userId?: string | number, userMemory?: string, onStatus?: (status: string) => void, plan: string = 'free'): Promise<AgentResponse> {
     let currentPrompt = message;
     let finalResponse = "";
     let loopCount = 0;
     const MAX_LOOPS = 5;
     const actions: AgentAction[] = [];
     let currentMemory = userMemory;
+    
+    let userFiles: {name: string, content: string}[] = [];
+    if (userId) {
+      const { redisCache } = await import('../lib/redis');
+      userFiles = await redisCache.getUserFiles(userId);
+    }
 
     while (loopCount < MAX_LOOPS) {
       let aiResponse: string;
       try {
         if (onStatus) onStatus("Analyzing request...");
-        aiResponse = await ai.generateText(currentPrompt, history, userName, 'web', currentMemory);
+        aiResponse = await ai.generateText(currentPrompt, history, userName, 'web', currentMemory, plan, userFiles);
         
         if (aiResponse.includes('[SYSTEM_ERROR_CREDITS]')) {
            return { response: aiResponse.replace('[SYSTEM_ERROR_CREDITS]', '⚠️ **API Limits Exceeded:**\n'), actions };
@@ -94,6 +100,11 @@ export class AgentService {
           const base64 = Buffer.from(arrayBuffer).toString('base64');
           actions.push({ type: 'image', url: `data:image/jpeg;base64,${base64}`, prompt: imgPrompt });
           
+          if (userId) {
+            const { redisCache } = await import('../lib/redis');
+            await redisCache.set(`last_image_${userId}`, base64, 3600 * 24); // Store for 24h
+          }
+
           currentPrompt = `[System: Image generated successfully for "${imgPrompt}". Continue your response.]`;
           loopCount++;
           if (onStatus) onStatus(`Processing generated image...`);
@@ -102,6 +113,43 @@ export class AgentService {
           currentPrompt = `[System: Failed to generate image. Inform the user and continue.]`;
           loopCount++;
           if (onStatus) onStatus(`🤔 Failed to generate image, recovering...`);
+          continue;
+        }
+      }
+
+      // Process [EDIT_IMAGE: prompt]
+      const editImageMatch = aiResponse.match(/\[EDIT_IMAGE:\s*(.+?)\]/);
+      if (editImageMatch) {
+        const editPrompt = editImageMatch[1].trim();
+        actions.push({ type: 'message', text: `🖌️ Editing image: ${editPrompt}...` });
+        if (onStatus) onStatus(`🖌️ Editing image...`);
+        try {
+          if (!userId) throw new Error('No user ID for retrieving last image');
+          const { redisCache } = await import('../lib/redis');
+          const lastImageBase64 = await redisCache.get<string>(`last_image_${userId}`);
+          
+          if (!lastImageBase64) {
+             throw new Error('No previously generated image found. I can only edit the last image I generated for you.');
+          }
+
+          const imageBuffer = Buffer.from(lastImageBase64, 'base64');
+          const imageBlob = new Blob([imageBuffer], { type: 'image/jpeg' });
+          
+          const newImageBlob = await ai.editImage(imageBlob, editPrompt);
+          const newArrayBuffer = await newImageBlob.arrayBuffer();
+          const newBase64 = Buffer.from(newArrayBuffer).toString('base64');
+          
+          actions.push({ type: 'image', url: `data:image/jpeg;base64,${newBase64}`, prompt: editPrompt });
+          await redisCache.set(`last_image_${userId}`, newBase64, 3600 * 24); // Update stored image
+          
+          currentPrompt = `[System: Image edited successfully based on "${editPrompt}". Continue your response.]`;
+          loopCount++;
+          if (onStatus) onStatus(`Processing edited image...`);
+          continue;
+        } catch (e: any) {
+          currentPrompt = `[System: Failed to edit image. Reason: ${e.message}. Inform the user and continue.]`;
+          loopCount++;
+          if (onStatus) onStatus(`🤔 Failed to edit image, recovering...`);
           continue;
         }
       }
@@ -192,10 +240,14 @@ export class AgentService {
     let loopCount = 0;
     const MAX_LOOPS = 5;
 
+    const { redisCache } = await import('../lib/redis');
+    const userFiles = await redisCache.getUserFiles(user.id);
+
     while (loopCount < MAX_LOOPS) {
       let aiResponse: string;
       try {
-        aiResponse = await ai.generateText(currentPrompt, history, userName, 'telegram', user.memory);
+        const plan = user.plan || 'free';
+        aiResponse = await ai.generateText(currentPrompt, history, userName, 'telegram', user.memory, plan, userFiles);
         
         if (aiResponse.includes('[SYSTEM_ERROR_CREDITS]')) {
            finalResponse = aiResponse.replace('[SYSTEM_ERROR_CREDITS]', '⚠️ <b>API Limits Exceeded:</b>\n');
@@ -260,7 +312,13 @@ export class AgentService {
         try {
           const imageBlob = await ai.generateImage(imgPrompt);
           const arrayBuffer = await imageBlob.arrayBuffer();
-          await bot.sendPhoto(chatId, Buffer.from(arrayBuffer), { caption: `🎨 ${imgPrompt}` });
+          const buffer = Buffer.from(arrayBuffer);
+          const base64 = buffer.toString('base64');
+          
+          await bot.sendPhoto(chatId, buffer, { caption: `🎨 ${imgPrompt}` });
+          
+          const { redisCache } = await import('../lib/redis');
+          await redisCache.set(`last_image_${user.id}`, base64, 3600 * 24); // 24h
           
           await addMessage(user.id, 'assistant', `[I generated an image: "${imgPrompt}"]`);
           currentPrompt = `[System: Image generated successfully for "${imgPrompt}". Continue your response.]`;
@@ -273,6 +331,46 @@ export class AgentService {
           history = await getChatHistory(user.id, 12);
           loopCount++;
           if (statusMsg) await bot.editMessageText(`🤔 <i>Failed to generate image, recovering...</i>`, { chat_id: chatId, message_id: statusMsg.message_id, parse_mode: 'HTML' }).catch(() => {});
+          continue;
+        }
+      }
+
+      // Process [EDIT_IMAGE: prompt]
+      const editImageMatch = aiResponse.match(/\[EDIT_IMAGE:\s*(.+?)\]/);
+      if (editImageMatch) {
+        const editPrompt = editImageMatch[1].trim();
+        if (statusMsg) {
+          await bot.editMessageText(`🖌️ <i>Editing image: ${editPrompt}...</i>`, { chat_id: chatId, message_id: statusMsg.message_id, parse_mode: 'HTML' }).catch(() => {});
+        }
+        try {
+          const { redisCache } = await import('../lib/redis');
+          const lastImageBase64 = await redisCache.get<string>(`last_image_${user.id}`);
+          if (!lastImageBase64) {
+             throw new Error('No previously generated image found. I can only edit the last image I generated for you.');
+          }
+
+          const imageBuffer = Buffer.from(lastImageBase64, 'base64');
+          const imageBlob = new Blob([imageBuffer], { type: 'image/jpeg' });
+          
+          const newImageBlob = await ai.editImage(imageBlob, editPrompt);
+          const newArrayBuffer = await newImageBlob.arrayBuffer();
+          const newBuffer = Buffer.from(newArrayBuffer);
+          const newBase64 = newBuffer.toString('base64');
+          
+          await bot.sendPhoto(chatId, newBuffer, { caption: `🖌️ Edited: ${editPrompt}` });
+          await redisCache.set(`last_image_${user.id}`, newBase64, 3600 * 24); 
+          
+          await addMessage(user.id, 'assistant', `[I edited the image: "${editPrompt}"]`);
+          currentPrompt = `[System: Image edited successfully for "${editPrompt}". Continue your response.]`;
+          history = await getChatHistory(user.id, 12);
+          loopCount++;
+          if (statusMsg) await bot.editMessageText(`🤔 <i>Analyzing edited image...</i>`, { chat_id: chatId, message_id: statusMsg.message_id, parse_mode: 'HTML' }).catch(() => {});
+          continue;
+        } catch (e: any) {
+          currentPrompt = `[System: Failed to edit image: ${e.message}. Inform the user and continue.]`;
+          history = await getChatHistory(user.id, 12);
+          loopCount++;
+          if (statusMsg) await bot.editMessageText(`🤔 <i>Failed to edit image, recovering...</i>`, { chat_id: chatId, message_id: statusMsg.message_id, parse_mode: 'HTML' }).catch(() => {});
           continue;
         }
       }

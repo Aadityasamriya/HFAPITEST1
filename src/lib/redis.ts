@@ -85,8 +85,38 @@ class RedisManager {
   }
 
   /**
-   * Delete a key from the cache.
+   * Retrieves short term memory files for a user
    */
+  async getUserFiles(userId: string | number): Promise<{name: string, content: string}[]> {
+    const files: {name: string, content: string}[] = [];
+    const prefix = `user_file_${userId}_`;
+    
+    if (this.client && this.isConnected) {
+      try {
+        const keys = await this.client.keys(`${prefix}*`);
+        for (const key of keys) {
+           const val = await this.get<{name: string, content: string}>(key);
+           if (val) files.push(val);
+        }
+        return files;
+      } catch (err) {
+        console.error(`[Redis] Failed to get user files:`, err);
+      }
+    }
+
+    // In-memory fallback
+    for (const key in this.fallbackMemoryCache) {
+      if (key.startsWith(prefix)) {
+        const memCache = this.fallbackMemoryCache[key];
+        if (Date.now() < memCache.expiry) {
+          files.push(JSON.parse(memCache.value));
+        } else {
+          delete this.fallbackMemoryCache[key];
+        }
+      }
+    }
+    return files;
+  }
   async del(key: string): Promise<void> {
     if (this.client && this.isConnected) {
       try {
